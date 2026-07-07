@@ -839,7 +839,7 @@ model SystemSettings {
 }
 
 /// One row per (category, provider) — e.g. (PAYMENT, "paystack"),
-/// (STORAGE, "scaleway"). Actual credentials live in `IntegrationSecret`,
+/// (STORAGE, "cloudflare-r2"). Actual credentials live in `IntegrationSecret`,
 /// never here — this row only holds non-secret config + enable state.
 model IntegrationSetting {
   id          String              @id @default(cuid())

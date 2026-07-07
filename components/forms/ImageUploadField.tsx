@@ -3,6 +3,7 @@
 import { useState, useTransition, type ChangeEvent } from "react";
 import Image from "next/image";
 import { getUploadUrlAction } from "@/services/storage/storage.actions";
+import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_LABEL } from "@/lib/constants/storage";
 
 export interface ImageUploadFieldProps {
   name: string;
@@ -14,11 +15,11 @@ export interface ImageUploadFieldProps {
 }
 
 /**
- * Uploads directly from the browser to Scaleway Object Storage via a
- * presigned URL — the file bytes never pass through our server. The
- * resulting public URL is carried into the surrounding <form> as a hidden
- * input named `name`, so this composes with a plain Server Action the same
- * way any other form field does.
+ * Uploads directly from the browser to Cloudflare R2 via a presigned URL —
+ * the file bytes never pass through our server. The resulting public URL
+ * is carried into the surrounding <form> as a hidden input named `name`,
+ * so this composes with a plain Server Action the same way any other form
+ * field does.
  */
 export function ImageUploadField({ name, label, folder, required, helperText, defaultUrl }: ImageUploadFieldProps) {
   const [publicUrl, setPublicUrl] = useState<string | null>(defaultUrl ?? null);
@@ -28,6 +29,17 @@ export function ImageUploadField({ name, label, folder, required, helperText, de
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number])) {
+      setError("Unsupported file type — please use JPEG, PNG, WebP, or AVIF.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      setError(`File is too large — maximum size is ${MAX_UPLOAD_SIZE_LABEL}.`);
+      event.target.value = "";
+      return;
+    }
 
     setError(null);
     startTransition(async () => {

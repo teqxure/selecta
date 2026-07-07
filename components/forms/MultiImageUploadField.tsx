@@ -4,6 +4,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import { getUploadUrlAction } from "@/services/storage/storage.actions";
 import { IMAGE_KIND_LABELS } from "@/lib/validators/product";
+import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_LABEL } from "@/lib/constants/storage";
 import type { ProductImageKind } from "@/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,16 @@ export function MultiImageUploadField({ name, folder, min = 2, max = 10, default
     setSlots((current) => current.map((slot) => (slot.key === key ? { ...slot, ...patch } : slot)));
   }
 
+  function validateFile(file: File): string | null {
+    if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number])) {
+      return "Unsupported file type";
+    }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      return `Too large (max ${MAX_UPLOAD_SIZE_LABEL})`;
+    }
+    return null;
+  }
+
   async function uploadFile(key: string, file: File) {
     try {
       const { uploadUrl, publicUrl } = await getUploadUrlAction(folder, file.type);
@@ -60,15 +71,20 @@ export function MultiImageUploadField({ name, folder, min = 2, max = 10, default
     const room = max - slots.length;
     const toAdd = files.slice(0, room);
 
-    const newSlots: Slot[] = toAdd.map((_, index) => ({
-      key: `upload-${Date.now()}-${index}`,
-      url: null,
-      kind: "OTHER",
-      uploading: true,
-      error: null,
-    }));
+    const newSlots: Slot[] = toAdd.map((file, index) => {
+      const validationError = validateFile(file);
+      return {
+        key: `upload-${Date.now()}-${index}`,
+        url: null,
+        kind: "OTHER",
+        uploading: validationError === null,
+        error: validationError,
+      };
+    });
     setSlots((current) => [...current, ...newSlots]);
-    toAdd.forEach((file, index) => uploadFile(newSlots[index].key, file));
+    toAdd.forEach((file, index) => {
+      if (newSlots[index].error === null) uploadFile(newSlots[index].key, file);
+    });
   }
 
   function removeSlot(key: string) {
@@ -94,8 +110,8 @@ export function MultiImageUploadField({ name, folder, min = 2, max = 10, default
                 </div>
               )}
               {slot.error && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/90 text-xs text-red-600">
-                  Failed
+                <div className="absolute inset-0 flex items-center justify-center bg-background/90 p-1 text-center text-xs text-red-600">
+                  {slot.error}
                 </div>
               )}
               <button

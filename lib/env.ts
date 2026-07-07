@@ -23,11 +23,21 @@ const envSchema = z.object({
    */
   SETTINGS_ENCRYPTION_KEY: z.string().min(32, "SETTINGS_ENCRYPTION_KEY must be at least 32 characters"),
 
-  SCALEWAY_ACCESS_KEY_ID: z.string().min(1).optional(),
-  SCALEWAY_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-  SCALEWAY_BUCKET_NAME: z.string().min(1).optional(),
-  SCALEWAY_REGION: z.string().default("fr-par"),
-  SCALEWAY_ENDPOINT: z.url().optional(),
+  /**
+   * Cloudflare R2 (S3-compatible object storage). `R2_ENDPOINT` is optional
+   * because it's derivable from `R2_ACCOUNT_ID` (the standard
+   * `https://<account_id>.r2.cloudflarestorage.com` form) — see
+   * services/storage/storage.service.ts. `R2_PUBLIC_URL` is the separate
+   * public-read base (a custom domain or the bucket's r2.dev URL) used to
+   * build URLs stored in the database; the S3 API endpoint itself is not
+   * publicly readable.
+   */
+  R2_ACCOUNT_ID: z.string().min(1).optional(),
+  R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+  R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  R2_BUCKET_NAME: z.string().min(1).optional(),
+  R2_ENDPOINT: z.url().optional(),
+  R2_PUBLIC_URL: z.url().optional(),
 
   NEXT_PUBLIC_APP_URL: z.url().default("http://localhost:3000"),
 });

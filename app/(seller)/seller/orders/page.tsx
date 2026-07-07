@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { listOrdersForSeller } from "@/services/orders/order.service";
+import { ROUTES } from "@/lib/constants/routes";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 
 export default async function SellerOrdersPage() {
   const session = await requireRole(Role.SELLER);
@@ -23,15 +25,17 @@ export default async function SellerOrdersPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {orders.map((order) => (
-            <Card key={order.id}>
-              <CardContent className="flex items-center justify-between p-4">
-                <div>
-                  <p className="font-medium text-secondary-foreground">Order #{order.id.slice(-8)}</p>
-                  <p className="text-sm text-muted-foreground">{order.items.length} item(s)</p>
-                </div>
-                <Badge tone={order.status === "DELIVERED" ? "success" : "neutral"}>{order.status}</Badge>
-              </CardContent>
-            </Card>
+            <Link key={order.id} href={ROUTES.seller.order(order.id)}>
+              <Card hoverable>
+                <CardContent className="flex items-center justify-between p-4">
+                  <div>
+                    <p className="font-medium text-secondary-foreground">Order #{order.id.slice(-8)}</p>
+                    <p className="text-sm text-muted-foreground">{order.items.length} item(s)</p>
+                  </div>
+                  <Badge tone={STATUS_TONE[order.status]}>{order.status.replaceAll("_", " ")}</Badge>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

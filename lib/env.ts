@@ -13,6 +13,15 @@ const envSchema = z.object({
   DIRECT_URL: z.url(),
 
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
+  /**
+   * 32-byte key (base64) for AES-256-GCM encryption of integration secrets
+   * at rest (Paystack/Flutterwave keys etc.) — those provider credentials
+   * themselves live in the database (IntegrationSecret), configured by
+   * Super Admin without a redeploy, not in env vars. This key is the one
+   * exception: it has to be an env var, since it's what unlocks everything
+   * stored under it.
+   */
+  SETTINGS_ENCRYPTION_KEY: z.string().min(32, "SETTINGS_ENCRYPTION_KEY must be at least 32 characters"),
 
   SCALEWAY_ACCESS_KEY_ID: z.string().min(1).optional(),
   SCALEWAY_SECRET_ACCESS_KEY: z.string().min(1).optional(),

@@ -34,6 +34,23 @@ export const STATUS_TONE: Record<string, BadgeProps["tone"]> = {
   REMOVED: "danger",
   SUSPENDED: "danger",
   BANNED: "danger",
+  CREATED: "neutral",
+  AWAITING_PAYMENT: "warning",
+  PAID: "accent",
+  PROCESSING: "warning",
+  READY_FOR_PICKUP: "warning",
+  IN_TRANSIT: "accent",
+  DELIVERED: "success",
+  COMPLETED: "success",
+  DISPUTED: "danger",
+  CANCELLED: "danger",
+  REQUESTED: "warning",
+  OPEN: "warning",
+  UNDER_REVIEW: "warning",
+  RESOLVED_REFUND: "success",
+  RESOLVED_RELEASE: "success",
+  RESOLVED_PARTIAL: "success",
+  CLOSED: "neutral",
 };
 
 /** Maps ConditionGrade enum values to a badge tone for product cards. */

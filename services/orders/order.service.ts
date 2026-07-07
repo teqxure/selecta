@@ -1,8 +1,26 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
-import { NotFoundError, ValidationError } from "@/lib/errors";
+import { releaseOrderTransactions } from "@/services/payments/payment.service";
+import { syncDeliveryStatus } from "@/services/logistics/delivery.service";
+import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
 import type { Address } from "@/types";
+import type { OrderStatus } from "@/generated/prisma/enums";
+
+/**
+ * Forward transitions a seller may drive themselves — anything not listed
+ * here (payment moving CREATED/AWAITING_PAYMENT/PAID, or the terminal
+ * DISPUTED/CANCELLED/COMPLETED states) is system-, buyer-, or
+ * admin-driven only. One Order can span multiple sellers, so any seller
+ * with at least one item in the order may advance it — see
+ * `advanceOrderStatusAsSeller`.
+ */
+const SELLER_ADVANCEABLE_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  PAID: ["PROCESSING"],
+  PROCESSING: ["READY_FOR_PICKUP", "IN_TRANSIT"],
+  READY_FOR_PICKUP: ["DELIVERED"],
+  IN_TRANSIT: ["DELIVERED"],
+};
 
 interface OrderLineInput {
   productId: string;
@@ -67,10 +85,42 @@ export async function createOrder(buyerId: string, lines: OrderLineInput[], ship
   return order;
 }
 
+const ORDER_DETAIL_INCLUDE = {
+  buyer: true,
+  items: { include: { product: { include: { images: { orderBy: { position: "asc" as const }, take: 1 }, seller: true } } } },
+  payment: true,
+  transactions: true,
+  delivery: { include: { events: { orderBy: { createdAt: "asc" as const } } } },
+  statusHistory: { orderBy: { createdAt: "asc" as const }, include: { actor: true } },
+} satisfies Parameters<typeof db.order.findUnique>[0]["include"];
+
 export async function getOrderById(id: string) {
   const order = await db.order.findUnique({ where: { id }, include: { items: true } });
   if (!order) throw new NotFoundError("Order");
   return order;
+}
+
+async function getOrderDetail(id: string) {
+  const order = await db.order.findUnique({ where: { id }, include: ORDER_DETAIL_INCLUDE });
+  if (!order) throw new NotFoundError("Order");
+  return order;
+}
+
+export async function getOrderDetailForBuyer(orderId: string, buyerId: string) {
+  const order = await getOrderDetail(orderId);
+  if (order.buyerId !== buyerId) throw new ForbiddenError();
+  return order;
+}
+
+export async function getOrderDetailForSeller(orderId: string, sellerUserId: string) {
+  const order = await getOrderDetail(orderId);
+  const ownsOrder = order.items.some((item) => item.product.seller.userId === sellerUserId);
+  if (!ownsOrder) throw new ForbiddenError();
+  return order;
+}
+
+export async function getOrderDetailForAdmin(orderId: string) {
+  return getOrderDetail(orderId);
 }
 
 export function listOrdersForBuyer(buyerId: string) {
@@ -131,7 +181,110 @@ export function getPendingOrdersCountForSeller(sellerId: string) {
   return db.order.count({
     where: {
       items: { some: { product: { sellerId } } },
-      status: { notIn: ["DELIVERED", "CANCELLED", "REFUNDED"] },
+      status: { notIn: ["COMPLETED", "CANCELLED"] },
     },
   });
+}
+
+/**
+ * A seller moving their fulfillment forward (PAID -> PROCESSING ->
+ * READY_FOR_PICKUP/IN_TRANSIT -> DELIVERED). Any seller with items in the
+ * order may drive it — Order.status is shared across all sellers in a
+ * multi-seller order, there's no per-seller sub-status in this schema.
+ */
+export async function advanceOrderStatusAsSeller(orderId: string, sellerUserId: string, nextStatus: OrderStatus, note?: string) {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { product: { include: { seller: true } } } } },
+  });
+  if (!order) throw new NotFoundError("Order");
+
+  const ownsOrder = order.items.some((item) => item.product.seller.userId === sellerUserId);
+  if (!ownsOrder) throw new ForbiddenError("You don't have any items in this order");
+
+  const allowed = SELLER_ADVANCEABLE_TRANSITIONS[order.status] ?? [];
+  if (!allowed.includes(nextStatus)) {
+    throw new ValidationError(`Cannot move an order from ${order.status} to ${nextStatus}`);
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.order.update({ where: { id: orderId }, data: { status: nextStatus } });
+    await tx.orderStatusHistory.create({ data: { orderId, status: nextStatus, actorId: sellerUserId, note } });
+  });
+
+  await syncDeliveryStatus(orderId, nextStatus, note);
+
+  await createNotification(
+    order.buyerId,
+    "ORDER",
+    "Order update",
+    `Your order #${orderId.slice(-8)} is now ${nextStatus.replaceAll("_", " ").toLowerCase()}.`,
+  );
+
+  return nextStatus;
+}
+
+/**
+ * The buyer confirming they received their order — the trigger that
+ * releases every seller's escrowed Transaction for this order into their
+ * available wallet balance. This is the "delivery confirmation" half of
+ * escrow release; the other half is `adminSetOrderStatus` below.
+ */
+export async function confirmDeliveryAsBuyer(orderId: string, buyerId: string) {
+  const order = await db.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new NotFoundError("Order");
+  if (order.buyerId !== buyerId) throw new ForbiddenError();
+  if (order.status !== "DELIVERED") {
+    throw new ValidationError("Only orders marked delivered can be confirmed received");
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
+    await tx.orderStatusHistory.create({
+      data: { orderId, status: "COMPLETED", actorId: buyerId, note: "Delivery confirmed by buyer" },
+    });
+  });
+
+  await releaseOrderTransactions(orderId, buyerId);
+
+  return "COMPLETED" as const;
+}
+
+/**
+ * Admin override — can force any status, including completing an order
+ * (and therefore releasing escrow) without waiting on the buyer, e.g. to
+ * resolve a dispute or unblock a stuck order. Every override is audited.
+ */
+export async function adminSetOrderStatus(orderId: string, adminId: string, nextStatus: OrderStatus, note?: string) {
+  const order = await db.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new NotFoundError("Order");
+
+  await db.$transaction(async (tx) => {
+    await tx.order.update({ where: { id: orderId }, data: { status: nextStatus } });
+    await tx.orderStatusHistory.create({ data: { orderId, status: nextStatus, actorId: adminId, note } });
+    await tx.auditLog.create({
+      data: {
+        actorId: adminId,
+        action: "ORDER_STATUS_OVERRIDDEN",
+        entityType: "Order",
+        entityId: orderId,
+        metadata: { from: order.status, to: nextStatus, note } as object,
+      },
+    });
+  });
+
+  if (nextStatus === "COMPLETED" && order.status !== "COMPLETED") {
+    await releaseOrderTransactions(orderId, adminId);
+  }
+
+  await syncDeliveryStatus(orderId, nextStatus, note);
+
+  await createNotification(
+    order.buyerId,
+    "ORDER",
+    "Order update",
+    `Your order #${orderId.slice(-8)} is now ${nextStatus.replaceAll("_", " ").toLowerCase()}.`,
+  );
+
+  return nextStatus;
 }

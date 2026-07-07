@@ -87,13 +87,16 @@ enum ProductEventType {
 }
 
 enum OrderStatus {
-  PENDING
-  CONFIRMED
+  CREATED
+  AWAITING_PAYMENT
+  PAID
   PROCESSING
-  SHIPPED
+  READY_FOR_PICKUP
+  IN_TRANSIT
   DELIVERED
+  COMPLETED
+  DISPUTED
   CANCELLED
-  REFUNDED
 }
 
 enum PaymentStatus {
@@ -104,12 +107,66 @@ enum PaymentStatus {
   FAILED
 }
 
+/// Per-seller payout ledger status — a superset of Payment's lifecycle
+/// because escrow hold/release happens per seller, not per order (one
+/// order can contain items from several sellers).
+enum TransactionStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  HELD_IN_ESCROW
+  RELEASED
+  REFUNDED
+}
+
 enum DeliveryStatus {
   PENDING
   PICKED_UP
   IN_TRANSIT
   DELIVERED
   FAILED
+}
+
+enum DeliveryMethod {
+  MANUAL
+  PARTNER
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  PROCESSING
+  PAID
+  REJECTED
+}
+
+enum DisputeType {
+  WRONG_ITEM
+  DAMAGED_ITEM
+  NOT_RECEIVED
+  OTHER
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_REFUND
+  RESOLVED_RELEASE
+  RESOLVED_PARTIAL
+  CLOSED
+}
+
+enum IntegrationCategory {
+  PAYMENT
+  STORAGE
+  EMAIL
+  SMS
+  AI
+}
+
+enum MarketplaceStatus {
+  OPEN
+  PAUSED
+  CLOSED
 }
 
 enum NotificationType {
@@ -160,6 +217,16 @@ model User {
   conversations   Conversation[]  @relation("BuyerConversations")
   messages        Message[]
 
+  transactionsAsBuyer    Transaction[]        @relation("BuyerTransactions")
+  orderStatusChanges     OrderStatusHistory[]
+  withdrawalReviews      Withdrawal[]         @relation("WithdrawalReviewer")
+  disputesAsBuyer        Dispute[]            @relation("BuyerDisputes")
+  disputesResolved       Dispute[]            @relation("ResolvedDisputes")
+  systemSettingsUpdated  SystemSettings[]
+  integrationSettingsSet IntegrationSetting[]
+  commissionRulesCreated CommissionRule[]
+  featureFlagsUpdated    FeatureFlag[]
+
   @@index([role])
   @@index([status])
   @@map("users")
@@ -196,6 +263,9 @@ model SellerProfile {
   verification  SellerVerification?
   followers     StoreFollow[]
   conversations Conversation[]
+  transactions  Transaction[]
+  withdrawals   Withdrawal[]
+  disputes      Dispute[]
 
   @@index([verificationStatus])
   @@index([agentId])
@@ -305,10 +375,11 @@ model Category {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  parent        Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children      Category[] @relation("CategoryHierarchy")
-  products      Product[]  @relation("ProductCategory")
-  subcategoryOf Product[]  @relation("ProductSubcategory")
+  parent          Category?        @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Category[]       @relation("CategoryHierarchy")
+  products        Product[]        @relation("ProductCategory")
+  subcategoryOf   Product[]        @relation("ProductSubcategory")
+  commissionRules CommissionRule[]
 
   @@index([parentId])
   @@map("categories")
@@ -439,21 +510,42 @@ model CartItem {
 model Order {
   id              String      @id @default(cuid())
   buyerId         String      @map("buyer_id")
-  status          OrderStatus @default(PENDING)
+  status          OrderStatus @default(CREATED)
   totalAmount     Decimal     @map("total_amount") @db.Decimal(10, 2)
   currency        String      @default("NGN")
   shippingAddress Json        @map("shipping_address")
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
-  buyer    User        @relation(fields: [buyerId], references: [id])
-  items    OrderItem[]
-  payment  Payment?
-  delivery Delivery?
+  buyer         User                 @relation(fields: [buyerId], references: [id])
+  items         OrderItem[]
+  payment       Payment?
+  delivery      Delivery?
+  transactions  Transaction[]
+  statusHistory OrderStatusHistory[]
+  disputes      Dispute[]
 
   @@index([buyerId])
   @@index([status])
   @@map("orders")
+}
+
+/// Every order status change is recorded here — the timeline shown to
+/// buyer/seller/admin, and the audit trail for "who moved this order and
+/// when." `actorId` is null for system/webhook-driven transitions.
+model OrderStatusHistory {
+  id        String      @id @default(cuid())
+  orderId   String      @map("order_id")
+  status    OrderStatus
+  note      String?
+  actorId   String?     @map("actor_id")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
 }
 
 model OrderItem {
@@ -472,6 +564,9 @@ model OrderItem {
   @@map("order_items")
 }
 
+/// The buyer-facing capture: one Payment per Order, matching the single
+/// charge the provider actually processes. Escrow hold/release happens
+/// per seller below in `Transaction`, not here.
 model Payment {
   id                String        @id @default(cuid())
   orderId           String        @unique @map("order_id")
@@ -483,27 +578,82 @@ model Payment {
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
 
   @@index([status])
   @@map("payments")
 }
 
+/// The seller-facing payout ledger: one row per (order, seller) pair,
+/// created once payment succeeds, carrying the commission split so a
+/// seller's payout is never recomputed from scratch — it's the number
+/// that was actually charged and committed at the time.
+model Transaction {
+  id               String            @id @default(cuid())
+  orderId          String            @map("order_id")
+  paymentId        String?           @map("payment_id")
+  buyerId          String            @map("buyer_id")
+  sellerId         String            @map("seller_id")
+  amount           Decimal           @db.Decimal(10, 2)
+  commissionRate   Float             @map("commission_rate")
+  commissionAmount Decimal           @map("commission_amount") @db.Decimal(10, 2)
+  sellerAmount     Decimal           @map("seller_amount") @db.Decimal(10, 2)
+  currency         String            @default("NGN")
+  provider         String
+  reference        String?           @unique
+  status           TransactionStatus @default(PENDING)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payment Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  buyer   User          @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  seller  SellerProfile @relation(fields: [sellerId], references: [id])
+
+  @@index([sellerId, status])
+  @@index([orderId])
+  @@index([status])
+  @@map("transactions")
+}
+
 model Wallet {
-  id          String   @id @default(cuid())
-  userId      String   @unique @map("user_id")
-  balance     Decimal  @default(0) @db.Decimal(10, 2)
+  id               String   @id @default(cuid())
+  userId           String   @unique @map("user_id")
+  balance          Decimal  @default(0) @db.Decimal(10, 2)
   /// Lifetime earnings — never decreases, even once a future withdrawal
   /// phase starts deducting from `balance`. Distinct source of truth from
   /// `balance` on purpose.
-  totalEarned Decimal  @default(0) @map("total_earned") @db.Decimal(10, 2)
-  currency    String   @default("NGN")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  totalEarned      Decimal  @default(0) @map("total_earned") @db.Decimal(10, 2)
+  /// Cumulative amount paid out via approved withdrawals.
+  withdrawnBalance Decimal  @default(0) @map("withdrawn_balance") @db.Decimal(10, 2)
+  currency         String   @default("NGN")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("wallets")
+}
+
+model Withdrawal {
+  id            String           @id @default(cuid())
+  sellerId      String           @map("seller_id")
+  amount        Decimal          @db.Decimal(10, 2)
+  bankName      String           @map("bank_name")
+  accountNumber String           @map("account_number")
+  accountName   String           @map("account_name")
+  status        WithdrawalStatus @default(REQUESTED)
+  reviewedById  String?          @map("reviewed_by_id")
+  reviewNotes   String?          @map("review_notes")
+  requestedAt   DateTime         @default(now()) @map("requested_at")
+  processedAt   DateTime?        @map("processed_at")
+
+  seller     SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  reviewedBy User?         @relation("WithdrawalReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([sellerId, status])
+  @@map("withdrawals")
 }
 
 model Review {
@@ -527,23 +677,40 @@ model Review {
 // ---------------------------------------------------------------------------
 
 model Delivery {
-  id           String         @id @default(cuid())
-  orderId      String         @unique @map("order_id")
-  agentId      String?        @map("agent_id")
-  status       DeliveryStatus @default(PENDING)
-  address      Json
-  trackingCode String?        @unique @map("tracking_code")
-  estimatedAt  DateTime?      @map("estimated_at")
-  deliveredAt  DateTime?      @map("delivered_at")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  id             String         @id @default(cuid())
+  orderId        String         @unique @map("order_id")
+  agentId        String?        @map("agent_id")
+  status         DeliveryStatus @default(PENDING)
+  method         DeliveryMethod @default(MANUAL)
+  address        Json
+  pickupLocation String?        @map("pickup_location")
+  deliveryFee    Decimal?       @map("delivery_fee") @db.Decimal(10, 2)
+  trackingCode   String?        @unique @map("tracking_code")
+  estimatedAt    DateTime?      @map("estimated_at")
+  deliveredAt    DateTime?      @map("delivered_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  agent User? @relation("AgentDeliveries", fields: [agentId], references: [id])
+  order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  agent  User?           @relation("AgentDeliveries", fields: [agentId], references: [id])
+  events DeliveryEvent[]
 
   @@index([agentId])
   @@index([status])
   @@map("deliveries")
+}
+
+model DeliveryEvent {
+  id         String         @id @default(cuid())
+  deliveryId String         @map("delivery_id")
+  status     DeliveryStatus
+  note       String?
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, createdAt])
+  @@map("delivery_events")
 }
 
 // ---------------------------------------------------------------------------
@@ -616,4 +783,134 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Disputes
+// ---------------------------------------------------------------------------
+
+model Dispute {
+  id           String        @id @default(cuid())
+  orderId      String        @map("order_id")
+  buyerId      String        @map("buyer_id")
+  sellerId     String        @map("seller_id")
+  type         DisputeType
+  description  String
+  evidenceUrls String[]      @map("evidence_urls")
+  status       DisputeStatus @default(OPEN)
+  resolution   String?
+  resolvedById String?       @map("resolved_by_id")
+  resolvedAt   DateTime?     @map("resolved_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  buyer      User          @relation("BuyerDisputes", fields: [buyerId], references: [id])
+  seller     SellerProfile @relation(fields: [sellerId], references: [id])
+  resolvedBy User?         @relation("ResolvedDisputes", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([sellerId])
+  @@index([orderId])
+  @@map("disputes")
+}
+
+// ---------------------------------------------------------------------------
+// Super Admin platform controls
+// ---------------------------------------------------------------------------
+
+/// Singleton row (fixed id "singleton") — global marketplace switches.
+model SystemSettings {
+  id                        String            @id @default("singleton")
+  platformName              String            @default("Selecta") @map("platform_name")
+  maintenanceMode           Boolean           @default(false) @map("maintenance_mode")
+  maintenanceMessage        String?           @map("maintenance_message")
+  allowNewSellers           Boolean           @default(true) @map("allow_new_sellers")
+  allowNewBuyers            Boolean           @default(true) @map("allow_new_buyers")
+  requireProductApproval    Boolean           @default(true) @map("require_product_approval")
+  requireSellerVerification Boolean           @default(true) @map("require_seller_verification")
+  marketplaceStatus         MarketplaceStatus @default(OPEN) @map("marketplace_status")
+  updatedById               String?           @map("updated_by_id")
+  updatedAt                 DateTime          @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("system_settings")
+}
+
+/// One row per (category, provider) — e.g. (PAYMENT, "paystack"),
+/// (STORAGE, "scaleway"). Actual credentials live in `IntegrationSecret`,
+/// never here — this row only holds non-secret config + enable state.
+model IntegrationSetting {
+  id          String              @id @default(cuid())
+  category    IntegrationCategory
+  provider    String
+  isEnabled   Boolean             @default(false) @map("is_enabled")
+  isPrimary   Boolean             @default(false) @map("is_primary")
+  config      Json?
+  updatedById String?             @map("updated_by_id")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  updatedBy User?               @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  secrets   IntegrationSecret[]
+
+  @@unique([category, provider])
+  @@map("integration_settings")
+}
+
+/// Encrypted-at-rest credential values. `encryptedValue` is AES-256-GCM
+/// ciphertext (iv+authTag+ciphertext packed, base64) — see
+/// lib/security/encryption.ts. Only `lastFourDisplay` (plaintext) is ever
+/// shown in the UI, masked like `********************x7d9`.
+model IntegrationSecret {
+  id                   String   @id @default(cuid())
+  integrationSettingId String   @map("integration_setting_id")
+  key                  String
+  encryptedValue       String   @map("encrypted_value")
+  lastFourDisplay      String   @map("last_four_display")
+  rotatedAt            DateTime @default(now()) @map("rotated_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  integrationSetting IntegrationSetting @relation(fields: [integrationSettingId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationSettingId, key])
+  @@map("integration_secrets")
+}
+
+/// `categoryId = null` is the platform default rate. A category-specific
+/// row overrides the default for that category. No commission is ever
+/// hardcoded in application code — see services/platform/commission.service.ts.
+model CommissionRule {
+  id            String    @id @default(cuid())
+  categoryId    String?   @map("category_id")
+  label         String
+  percentage    Float
+  isPromotional Boolean   @default(false) @map("is_promotional")
+  startsAt      DateTime? @map("starts_at")
+  endsAt        DateTime? @map("ends_at")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdById   String?   @map("created_by_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  category  Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("commission_rules")
+}
+
+model FeatureFlag {
+  key         String   @id
+  label       String
+  description String?
+  isEnabled   Boolean  @default(false) @map("is_enabled")
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("feature_flags")
 }

@@ -1,137 +1,271 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
-import { NotFoundError, ValidationError } from "@/lib/errors";
+import { getActiveCommissionRateForCategory } from "@/services/platform/commission.service";
+import { NotFoundError, ValidationError, ConflictError } from "@/lib/errors";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
- * Escrow lifecycle: PENDING (initiated) -> HELD_IN_ESCROW (buyer paid,
- * funds held) -> RELEASED (delivery confirmed, seller paid out) or
- * REFUNDED (dispute/cancellation). The actual payment provider integration
- * (Paystack/Flutterwave) plugs in at `initiatePayment` and the webhook
- * handler that calls `markHeldInEscrow`.
+ * Escrow lifecycle, split across two models on purpose:
+ *
+ *   Payment      (1:1 per order)   PENDING -> HELD_IN_ESCROW -> RELEASED | REFUNDED | FAILED
+ *   Transaction  (1 per seller in the order) PENDING -> HELD_IN_ESCROW -> RELEASED | REFUNDED
+ *
+ * Payment is the buyer-facing capture record. Transaction is the seller
+ * payout ledger — it exists because one order can span multiple sellers,
+ * each with their own commission rate and their own release/refund/dispute
+ * outcome. Never trust a frontend "payment succeeded" call: the only way
+ * a Payment/Transaction moves out of PENDING is `confirmPaymentSuccess`,
+ * driven exclusively by a signature-verified provider webhook.
  */
+
 export async function initiatePayment(orderId: string, provider: string) {
-  const order = await db.order.findUnique({ where: { id: orderId } });
+  const order = await db.order.findUnique({ where: { id: orderId }, include: { payment: true } });
   if (!order) throw new NotFoundError("Order");
+  if (order.payment) throw new ConflictError("This order already has a payment initiated");
 
-  return db.payment.create({
-    data: {
-      orderId,
-      amount: order.totalAmount,
-      currency: order.currency,
-      provider,
-      status: "PENDING",
-    },
-  });
-}
+  return db.$transaction(async (tx) => {
+    const payment = await tx.payment.create({
+      data: { orderId, amount: order.totalAmount, currency: order.currency, provider, status: "PENDING" },
+    });
 
-export async function markHeldInEscrow(paymentId: string, providerReference: string) {
-  return db.payment.update({
-    where: { id: paymentId },
-    data: { status: "HELD_IN_ESCROW", providerReference },
+    await tx.order.update({ where: { id: orderId }, data: { status: "AWAITING_PAYMENT" } });
+    await tx.orderStatusHistory.create({ data: { orderId, status: "AWAITING_PAYMENT" } });
+
+    return payment;
   });
 }
 
 /**
- * An order can contain items from several sellers, so the escrowed payment
- * is split by each seller's share of the order subtotal, credited to their
- * wallet, and each of their items is marked SOLD — not just the first item,
- * which the original single-seller-shaped version of this function assumed.
+ * The single entry point for a provider confirming a charge succeeded.
+ * Idempotent by design — providers retry webhooks, so this must be safe
+ * to call twice for the same reference without double-crediting anyone.
+ * Computes each seller's commission from the live CommissionRule table
+ * (never a hardcoded percentage) and creates one Transaction per seller,
+ * held in escrow until delivery is confirmed or an admin releases it.
  */
-export async function releaseToSeller(paymentId: string) {
+export async function confirmPaymentSuccess(paymentId: string, providerReference: string) {
   const payment = await db.payment.findUnique({ where: { id: paymentId } });
   if (!payment) throw new NotFoundError("Payment");
-  if (payment.status !== "HELD_IN_ESCROW") {
-    throw new ValidationError("Only escrowed payments can be released");
+
+  if (payment.status === "HELD_IN_ESCROW" || payment.status === "RELEASED") {
+    // Already processed by an earlier webhook delivery — no-op.
+    return { payment, alreadyProcessed: true as const };
+  }
+  if (payment.status !== "PENDING") {
+    throw new ValidationError(`Cannot confirm a payment in status ${payment.status}`);
   }
 
-  const sellerPayouts = await db.$transaction(async (tx) => {
-    const items = await tx.orderItem.findMany({
-      where: { orderId: payment.orderId },
-      include: { product: true },
+  const items = await db.orderItem.findMany({
+    where: { orderId: payment.orderId },
+    include: { product: { include: { seller: true } } },
+  });
+  if (items.length === 0) throw new NotFoundError("Order items");
+
+  const bySeller = new Map<
+    string,
+    { userId: string; productIds: string[]; gross: number; commission: number; sellerAmount: number }
+  >();
+  const rateCache = new Map<string, number>();
+
+  for (const item of items) {
+    const categoryId = item.product.categoryId;
+    if (!rateCache.has(categoryId)) {
+      const { percentage } = await getActiveCommissionRateForCategory(categoryId);
+      rateCache.set(categoryId, percentage);
+    }
+    const rate = rateCache.get(categoryId)!;
+
+    const lineTotal = Number(item.unitPrice) * item.quantity;
+    const lineCommission = (lineTotal * rate) / 100;
+
+    const entry = bySeller.get(item.product.sellerId) ?? {
+      userId: item.product.seller.userId,
+      productIds: [],
+      gross: 0,
+      commission: 0,
+      sellerAmount: 0,
+    };
+    entry.productIds.push(item.productId);
+    entry.gross += lineTotal;
+    entry.commission += lineCommission;
+    entry.sellerAmount += lineTotal - lineCommission;
+    bySeller.set(item.product.sellerId, entry);
+  }
+
+  const transactions = await db.$transaction(async (tx) => {
+    const updatedPayment = await tx.payment.update({
+      where: { id: paymentId },
+      data: { status: "HELD_IN_ESCROW", providerReference },
     });
-    if (items.length === 0) throw new NotFoundError("Order items");
 
-    const orderSubtotal = items.reduce((sum, item) => sum + Number(item.unitPrice) * item.quantity, 0);
+    const created = [];
+    for (const [sellerId, entry] of bySeller) {
+      const blendedRate = entry.gross > 0 ? (entry.commission / entry.gross) * 100 : 0;
 
-    const bySeller = new Map<string, { subtotal: number; productIds: string[] }>();
-    for (const item of items) {
-      const lineTotal = Number(item.unitPrice) * item.quantity;
-      const entry = bySeller.get(item.product.sellerId) ?? { subtotal: 0, productIds: [] };
-      entry.subtotal += lineTotal;
-      entry.productIds.push(item.productId);
-      bySeller.set(item.product.sellerId, entry);
+      const transaction = await tx.transaction.create({
+        data: {
+          orderId: payment.orderId,
+          paymentId: payment.id,
+          buyerId: (await tx.order.findUniqueOrThrow({ where: { id: payment.orderId } })).buyerId,
+          sellerId,
+          amount: entry.gross,
+          commissionRate: blendedRate,
+          commissionAmount: entry.commission,
+          sellerAmount: entry.sellerAmount,
+          currency: payment.currency,
+          provider: payment.provider,
+          reference: `${providerReference}:${sellerId}`,
+          status: "HELD_IN_ESCROW",
+        },
+      });
+      created.push({ transaction, userId: entry.userId });
     }
 
-    const payouts: { sellerProfileId: string; userId: string; amount: number }[] = [];
+    await tx.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
+    await tx.orderStatusHistory.create({ data: { orderId: payment.orderId, status: "PAID" } });
 
-    for (const [sellerProfileId, { subtotal, productIds }] of bySeller) {
-      const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: sellerProfileId } });
-      const share = orderSubtotal > 0 ? (subtotal / orderSubtotal) * Number(payment.amount) : 0;
+    await tx.auditLog.create({
+      data: {
+        action: "PAYMENT_CONFIRMED",
+        entityType: "Payment",
+        entityId: payment.id,
+        metadata: { providerReference, sellerCount: created.length } as object,
+      },
+    });
 
-      await tx.wallet.upsert({
-        where: { userId: sellerProfile.userId },
-        create: { userId: sellerProfile.userId, balance: share, totalEarned: share },
-        update: { balance: { increment: share }, totalEarned: { increment: share } },
-      });
-
-      await tx.sellerProfile.update({
-        where: { id: sellerProfileId },
-        data: { totalSales: { increment: productIds.length } },
-      });
-
-      await tx.product.updateMany({ where: { id: { in: productIds } }, data: { status: "SOLD" } });
-
-      payouts.push({ sellerProfileId, userId: sellerProfile.userId, amount: share });
-    }
-
-    await tx.payment.update({ where: { id: paymentId }, data: { status: "RELEASED" } });
-
-    return payouts;
+    return { updatedPayment, created };
   });
 
   await Promise.all(
-    sellerPayouts.map((payout) =>
+    transactions.created.map(({ userId, transaction }) =>
       createNotification(
-        payout.userId,
+        userId,
         "PAYMENT",
-        "Payment released",
-        `A payment of ₦${payout.amount.toLocaleString("en-NG", { maximumFractionDigits: 2 })} has been added to your wallet.`,
+        "Payment received — held in escrow",
+        `₦${Number(transaction.sellerAmount).toLocaleString("en-NG", { maximumFractionDigits: 2 })} is held in escrow and will release once delivery is confirmed.`,
       ),
     ),
   );
 
-  return sellerPayouts;
+  return { payment: transactions.updatedPayment, alreadyProcessed: false as const };
 }
 
-/**
- * This seller's share of orders whose payment is still HELD_IN_ESCROW —
- * i.e. sold but not yet released. Computed the same way `releaseToSeller`
- * splits a payout, just not committed to the wallet yet.
- */
-export async function getSellerPendingBalance(sellerId: string) {
-  // Every row here already belongs to this seller (the `where` filters on
-  // it), so no second query is needed to isolate the seller's share.
-  const sellerItems = await db.orderItem.findMany({
-    where: { product: { sellerId }, order: { payment: { status: "HELD_IN_ESCROW" } } },
-    include: { order: { include: { payment: true, items: true } } },
+export async function markPaymentFailed(paymentId: string) {
+  return db.$transaction(async (tx) => {
+    const payment = await tx.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
+    await tx.order.update({ where: { id: payment.orderId }, data: { status: "CANCELLED" } });
+    await tx.orderStatusHistory.create({ data: { orderId: payment.orderId, status: "CANCELLED", note: "Payment failed" } });
+    return payment;
+  });
+}
+
+async function releaseTransactionInternal(tx: Prisma.TransactionClient, transactionId: string, actorId: string | null) {
+  const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
+  if (!transaction) throw new NotFoundError("Transaction");
+  if (transaction.status !== "HELD_IN_ESCROW") {
+    throw new ValidationError("Only escrowed transactions can be released");
+  }
+
+  const released = await tx.transaction.update({ where: { id: transactionId }, data: { status: "RELEASED" } });
+
+  const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: transaction.sellerId } });
+  const sellerAmount = Number(transaction.sellerAmount);
+
+  await tx.wallet.upsert({
+    where: { userId: sellerProfile.userId },
+    create: { userId: sellerProfile.userId, balance: sellerAmount, totalEarned: sellerAmount },
+    update: { balance: { increment: sellerAmount }, totalEarned: { increment: sellerAmount } },
   });
 
-  const byOrder = new Map<string, { sellerTotal: number; orderTotal: number; paymentAmount: number }>();
-  for (const item of sellerItems) {
-    if (byOrder.has(item.orderId) || !item.order.payment) continue;
+  const items = await tx.orderItem.findMany({
+    where: { orderId: transaction.orderId, product: { sellerId: transaction.sellerId } },
+  });
+  await tx.sellerProfile.update({ where: { id: transaction.sellerId }, data: { totalSales: { increment: items.length } } });
+  await tx.product.updateMany({ where: { id: { in: items.map((item) => item.productId) } }, data: { status: "SOLD" } });
 
-    const orderTotal = item.order.items.reduce((sum, line) => sum + Number(line.unitPrice) * line.quantity, 0);
-    const sellerTotal = sellerItems
-      .filter((line) => line.orderId === item.orderId)
-      .reduce((sum, line) => sum + Number(line.unitPrice) * line.quantity, 0);
+  await tx.auditLog.create({
+    data: { actorId, action: "TRANSACTION_RELEASED", entityType: "Transaction", entityId: transactionId },
+  });
 
-    byOrder.set(item.orderId, { sellerTotal, orderTotal, paymentAmount: Number(item.order.payment.amount) });
-  }
+  return { transaction: released, sellerUserId: sellerProfile.userId, sellerAmount };
+}
 
-  let pending = 0;
-  for (const { sellerTotal, orderTotal, paymentAmount } of byOrder.values()) {
-    pending += orderTotal > 0 ? (sellerTotal / orderTotal) * paymentAmount : 0;
-  }
-  return pending;
+/** Admin manual release (or dispute resolution) of a single seller's escrowed transaction. */
+export async function releaseTransaction(transactionId: string, actorId: string) {
+  const result = await db.$transaction((tx) => releaseTransactionInternal(tx, transactionId, actorId));
+
+  await createNotification(
+    result.sellerUserId,
+    "PAYMENT",
+    "Payment released",
+    `₦${result.sellerAmount.toLocaleString("en-NG", { maximumFractionDigits: 2 })} has been released to your wallet.`,
+  );
+
+  return result.transaction;
+}
+
+/** Releases every escrowed transaction on an order at once — the delivery-confirmation path. */
+export async function releaseOrderTransactions(orderId: string, actorId: string | null) {
+  const held = await db.transaction.findMany({ where: { orderId, status: "HELD_IN_ESCROW" } });
+
+  const results = await db.$transaction(async (tx) => {
+    const released = [];
+    for (const transaction of held) {
+      released.push(await releaseTransactionInternal(tx, transaction.id, actorId));
+    }
+    return released;
+  });
+
+  await Promise.all(
+    results.map((result) =>
+      createNotification(
+        result.sellerUserId,
+        "PAYMENT",
+        "Payment released",
+        `₦${result.sellerAmount.toLocaleString("en-NG", { maximumFractionDigits: 2 })} has been released to your wallet.`,
+      ),
+    ),
+  );
+
+  return results.map((result) => result.transaction);
+}
+
+/** Dispute-driven refund of a single seller's escrowed transaction — no wallet credit. */
+export async function refundTransaction(transactionId: string, actorId: string) {
+  return db.$transaction(async (tx) => {
+    const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
+    if (!transaction) throw new NotFoundError("Transaction");
+    if (transaction.status !== "HELD_IN_ESCROW") {
+      throw new ValidationError("Only escrowed transactions can be refunded");
+    }
+
+    const refunded = await tx.transaction.update({ where: { id: transactionId }, data: { status: "REFUNDED" } });
+
+    await tx.auditLog.create({
+      data: { actorId, action: "TRANSACTION_REFUNDED", entityType: "Transaction", entityId: transactionId },
+    });
+
+    return refunded;
+  });
+}
+
+/** Available (withdrawable), held (escrowed), withdrawn, and lifetime-earned balances for a seller's wallet. */
+export async function getSellerBalances(sellerId: string) {
+  const sellerProfile = await db.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } });
+
+  const [wallet, heldAggregate] = await Promise.all([
+    db.wallet.findUnique({ where: { userId: sellerProfile.userId } }),
+    db.transaction.aggregate({
+      where: { sellerId, status: "HELD_IN_ESCROW" },
+      _sum: { sellerAmount: true },
+    }),
+  ]);
+
+  return {
+    available: Number(wallet?.balance ?? 0),
+    held: Number(heldAggregate._sum.sellerAmount ?? 0),
+    withdrawn: Number(wallet?.withdrawnBalance ?? 0),
+    lifetime: Number(wallet?.totalEarned ?? 0),
+  };
 }

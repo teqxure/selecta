@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { db } from "@/lib/db";
 import { ROUTES } from "@/lib/constants/routes";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -8,7 +7,7 @@ import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 
 export default async function AdminOrdersPage() {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("orders.manage");
 
   const orders = await db.order.findMany({
     include: { buyer: true, items: true },

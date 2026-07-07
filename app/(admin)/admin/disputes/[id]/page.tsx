@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { getDisputeForAdmin } from "@/services/disputes/dispute.service";
 import { isAppError } from "@/lib/errors";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -10,7 +9,7 @@ import { markUnderReviewAction, resolveWithRefundAction, resolveWithReleaseActio
 import { ResolveForm } from "./resolve-form";
 
 export default async function AdminDisputeDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("disputes.handle");
   const { id } = await params;
 
   let dispute;

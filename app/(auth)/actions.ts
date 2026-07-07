@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { z } from "zod";
 import { loginSchema, registerSchema } from "@/lib/validators/auth";
 import { createUser, getUserByEmail, recordLoginHistory } from "@/services/users/user.service";
@@ -10,18 +9,12 @@ import { verifyPassword, DUMMY_PASSWORD_HASH } from "@/lib/auth/password";
 import { setSessionCookie, clearSessionCookie } from "@/lib/auth/session";
 import { isAppError } from "@/lib/errors";
 import { checkLoginRateLimit } from "@/lib/security/rate-limit";
+import { getRequestMeta } from "@/lib/security/request-meta";
 import { ROUTES } from "@/lib/constants/routes";
 import { ROLE_HOME_ROUTE, Role, UserStatus } from "@/lib/constants/roles";
 
 export interface AuthActionState {
   error?: string;
-}
-
-async function requestMeta() {
-  const headerList = await headers();
-  const ipAddress = headerList.get("x-forwarded-for")?.split(",")[0]?.trim() || headerList.get("x-real-ip") || undefined;
-  const userAgent = headerList.get("user-agent") ?? undefined;
-  return { ipAddress, userAgent };
 }
 
 export async function registerAction(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
@@ -30,7 +23,7 @@ export async function registerAction(_prevState: AuthActionState, formData: Form
     return { error: z.prettifyError(parsed.error) };
   }
 
-  const { ipAddress } = await requestMeta();
+  const { ipAddress } = await getRequestMeta();
   const rateLimit = checkLoginRateLimit(`register:${ipAddress ?? "unknown"}`);
   if (!rateLimit.allowed) {
     return { error: "Too many attempts. Please try again in a few minutes." };
@@ -57,7 +50,7 @@ export async function loginAction(_prevState: AuthActionState, formData: FormDat
   }
 
   const { email, password, rememberMe } = parsed.data;
-  const { ipAddress, userAgent } = await requestMeta();
+  const { ipAddress, userAgent } = await getRequestMeta();
 
   const rateLimit = checkLoginRateLimit(`${email}:${ipAddress ?? "unknown"}`);
   if (!rateLimit.allowed) {

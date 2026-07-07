@@ -1,33 +1,31 @@
 import "server-only";
-import { getSession } from "@/lib/auth/session";
 import { currentUser } from "@/lib/auth/current-user";
-import { AuthError, ForbiddenError } from "@/lib/errors";
+import { AuthError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { Role, UserStatus } from "@/lib/constants/roles";
+import { hasPermission } from "@/lib/auth/permissions";
 
 /**
- * Defense in depth: `proxy.ts` blocks unauthenticated requests to protected
- * route prefixes, but Server Actions can be called directly, so every
- * mutation must also re-check the session here.
+ * SECURITY: every one of these re-reads the user from the database (via
+ * `currentUser()`, which is request-deduped through React's `cache()`, so
+ * this costs at most one extra query per request, not per call). A JWT is
+ * a bearer token, not a source of truth — trusting its baked-in `role`
+ * without checking the current DB row is exactly how a suspended/demoted/
+ * banned user keeps working access on an old-but-unexpired session. That
+ * used to be the case here (`requireRole`/`requireAuth` only checked the
+ * cookie); it isn't anymore. `proxy.ts` still does a cheap cookie-only
+ * check as a fast, optimistic first gate for routing — these functions are
+ * the authoritative check every Server Action/Route Handler must call.
  */
 export async function requireAuth() {
-  const session = await getSession();
-  if (!session) throw new AuthError();
-  return session;
+  const user = await requireActiveUser();
+  return { userId: user.id, role: user.role };
 }
 
 export async function requireRole(...allowed: Role[]) {
-  const session = await requireAuth();
-  if (!allowed.includes(session.role)) throw new ForbiddenError();
-  return session;
+  const user = await requireActiveRole(...allowed);
+  return { userId: user.id, role: user.role };
 }
 
-/**
- * Stricter than `requireAuth`: re-reads the user from the database so a
- * session issued before a suspension/ban is rejected immediately rather
- * than waiting for the JWT to expire. Use this for sensitive mutations
- * (onboarding submission, profile changes, admin actions) — `requireRole`
- * remains the lightweight, cookie-only check for cheap reads.
- */
 export async function requireActiveUser() {
   const user = await currentUser();
   if (!user) throw new AuthError();
@@ -47,4 +45,33 @@ export async function requireActiveRole(...allowed: Role[]) {
   const user = await requireActiveUser();
   if (!allowed.includes(user.role)) throw new ForbiddenError();
   return user;
+}
+
+/**
+ * Permission-gated access — the fine-grained layer on top of role checks.
+ * SUPER_ADMIN implicitly holds every permission ("*"). ADMIN only passes
+ * for permissions granted individually via `/admin/admins`. Returns the
+ * full user row since callers of this typically need more than userId/role
+ * (e.g. to log which admin acted).
+ */
+export async function requirePermission(...permissions: string[]) {
+  const user = await requireActiveUser();
+  if (!permissions.some((permission) => hasPermission(user, permission))) {
+    throw new ForbiddenError();
+  }
+  return user;
+}
+
+/**
+ * Formalizes the "ownership check IS the query" pattern used throughout
+ * the service layer (`where: { id, sellerId }` etc.) — fetch with the
+ * scoping already applied, and treat a null result as "not found," not as
+ * "found but not yours." Never fetch by bare id and compare after the
+ * fact — that leaks existence (timing, or a distinguishable error) even if
+ * you correctly deny access.
+ */
+export async function requireOwnership<T>(fetchScopedToOwner: () => Promise<T | null>, resourceName = "Resource"): Promise<T> {
+  const resource = await fetchScopedToOwner();
+  if (!resource) throw new NotFoundError(resourceName);
+  return resource;
 }

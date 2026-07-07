@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { db } from "@/lib/db";
 import { getSellerAnalytics } from "@/services/analytics/analytics.service";
 import { listAgents } from "@/services/sellers/seller.service";
@@ -12,7 +11,7 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { suspendSellerAction, reinstateSellerAction, assignAgentAction } from "./actions";
 
 export default async function AdminSellerDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("vendors.manage");
   const { id } = await params;
 
   const seller = await db.sellerProfile.findUnique({ where: { id }, include: { user: true, agent: true } });

@@ -1,5 +1,4 @@
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { listCategoryTree } from "@/services/categories/category.service";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -8,7 +7,7 @@ import { toggleCategoryActiveAction, deleteCategoryAction } from "./actions";
 import { CreateCategoryForm } from "./create-form";
 
 export default async function AdminCategoriesPage() {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("content.manage");
   const categories = await listCategoryTree();
 
   return (

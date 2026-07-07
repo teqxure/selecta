@@ -32,7 +32,7 @@ export async function submitStoreSetupAction(
     if (profile.onboardingStep < 2) {
       return { error: "Please complete the personal information step first." };
     }
-    await completeStoreSetupStep(profile.id, parsed.data);
+    await completeStoreSetupStep(user.id, profile.id, parsed.data);
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;

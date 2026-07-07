@@ -1,5 +1,4 @@
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { listWithdrawalRequests } from "@/services/payments/withdrawal.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
@@ -11,7 +10,7 @@ import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 import { markWithdrawalProcessingAction, approveWithdrawalAction, rejectWithdrawalAction } from "./actions";
 
 export default async function AdminWithdrawalsPage() {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("payouts.manage");
   const withdrawals = await listWithdrawalRequests();
 
   const format = (value: number) =>

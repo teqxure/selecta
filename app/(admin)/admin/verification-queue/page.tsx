@@ -1,13 +1,12 @@
 import Image from "next/image";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { listPendingVerifications } from "@/services/sellers/seller.service";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { approveVerificationAction, rejectVerificationAction } from "./actions";
 
 export default async function AdminVerificationQueuePage() {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("vendors.verify");
   const pending = await listPendingVerifications();
 
   return (

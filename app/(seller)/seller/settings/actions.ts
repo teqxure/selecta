@@ -23,7 +23,7 @@ export async function updateSellerSettingsAction(
 
   try {
     const profile = await getSellerProfileByUserId(user.id);
-    await updateStoreSettings(profile.id, parsed.data);
+    await updateStoreSettings(user.id, profile.id, parsed.data);
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;

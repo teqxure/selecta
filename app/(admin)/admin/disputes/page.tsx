@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { listDisputes } from "@/services/disputes/dispute.service";
 import { ROUTES } from "@/lib/constants/routes";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -9,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Gavel } from "lucide-react";
 
 export default async function AdminDisputesPage() {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("disputes.handle");
   const disputes = await listDisputes();
 
   return (

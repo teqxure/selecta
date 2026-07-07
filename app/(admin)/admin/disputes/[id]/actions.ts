@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import {
   markDisputeUnderReview,
   resolveDisputeWithRefund,
@@ -17,19 +16,19 @@ export interface DisputeActionState {
 }
 
 export async function markUnderReviewAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  const admin = await requirePermission("disputes.handle");
   const disputeId = String(formData.get("disputeId"));
-  await markDisputeUnderReview(session.userId, disputeId);
+  await markDisputeUnderReview(admin.id, disputeId);
   revalidatePath(ROUTES.admin.dispute(disputeId));
 }
 
 export async function resolveWithRefundAction(_prevState: DisputeActionState, formData: FormData): Promise<DisputeActionState> {
-  const session = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  const admin = await requirePermission("disputes.handle");
   const disputeId = String(formData.get("disputeId"));
   const note = String(formData.get("resolution") || "").trim();
 
   try {
-    await resolveDisputeWithRefund(session.userId, disputeId, note);
+    await resolveDisputeWithRefund(admin.id, disputeId, note);
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;
@@ -40,12 +39,12 @@ export async function resolveWithRefundAction(_prevState: DisputeActionState, fo
 }
 
 export async function resolveWithReleaseAction(_prevState: DisputeActionState, formData: FormData): Promise<DisputeActionState> {
-  const session = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  const admin = await requirePermission("disputes.handle");
   const disputeId = String(formData.get("disputeId"));
   const note = String(formData.get("resolution") || "").trim();
 
   try {
-    await resolveDisputeWithRelease(session.userId, disputeId, note);
+    await resolveDisputeWithRelease(admin.id, disputeId, note);
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;
@@ -59,12 +58,12 @@ export async function closeWithoutActionAction(
   _prevState: DisputeActionState,
   formData: FormData,
 ): Promise<DisputeActionState> {
-  const session = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  const admin = await requirePermission("disputes.handle");
   const disputeId = String(formData.get("disputeId"));
   const note = String(formData.get("resolution") || "").trim();
 
   try {
-    await closeDisputeWithoutAction(session.userId, disputeId, note);
+    await closeDisputeWithoutAction(admin.id, disputeId, note);
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;

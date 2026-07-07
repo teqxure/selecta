@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+import type { Prisma } from "@/generated/prisma/client";
 import { sanitizeOptionalText, sanitizeText } from "@/lib/security/sanitize";
 import { createNotification } from "@/services/notifications/notification.service";
 import { PAGINATION } from "@/lib/constants/app";
@@ -19,9 +20,23 @@ export function findSellerProfileByUserId(userId: string) {
   return db.sellerProfile.findUnique({ where: { userId }, include: { verification: true } });
 }
 
+/**
+ * Every mutation below takes the caller's `userId` and scopes the
+ * `sellerProfile` write to `{ id, userId }` — matching the ownership-in-
+ * the-query pattern used elsewhere (products, addresses) rather than
+ * trusting that every call site only ever passes its own profile id.
+ */
+async function assertOwnsSellerProfile(tx: Prisma.TransactionClient, sellerProfileId: string, userId: string) {
+  const profile = await tx.sellerProfile.findFirst({ where: { id: sellerProfileId, userId } });
+  if (!profile) throw new NotFoundError("Seller profile");
+  return profile;
+}
+
 /** Onboarding step 1: confirm personal info collected at signup. */
 export async function completePersonalInfoStep(userId: string, sellerProfileId: string, input: PersonalInfoInput) {
   return db.$transaction(async (tx) => {
+    await assertOwnsSellerProfile(tx, sellerProfileId, userId);
+
     await tx.user.update({
       where: { id: userId },
       data: { firstName: input.firstName, lastName: input.lastName, phone: input.phone },
@@ -59,12 +74,12 @@ async function generateUniqueStoreSlug(storeName: string, sellerProfileId: strin
 }
 
 /** Onboarding step 2: the store itself. */
-export async function completeStoreSetupStep(sellerProfileId: string, input: StoreSetupInput) {
+export async function completeStoreSetupStep(userId: string, sellerProfileId: string, input: StoreSetupInput) {
   const storeName = sanitizeText(input.storeName);
   const storeSlug = await generateUniqueStoreSlug(storeName, sellerProfileId);
 
-  return db.sellerProfile.update({
-    where: { id: sellerProfileId },
+  const { count } = await db.sellerProfile.updateMany({
+    where: { id: sellerProfileId, userId },
     data: {
       storeName,
       storeSlug,
@@ -75,6 +90,9 @@ export async function completeStoreSetupStep(sellerProfileId: string, input: Sto
       onboardingStep: 3,
     },
   });
+  if (count === 0) throw new NotFoundError("Seller profile");
+
+  return db.sellerProfile.findUniqueOrThrow({ where: { id: sellerProfileId } });
 }
 
 /** Onboarding step 3: verification documents — submission, not approval. */
@@ -84,6 +102,8 @@ export async function submitVerification(
   input: VerificationSubmissionInput,
 ) {
   return db.$transaction(async (tx) => {
+    await assertOwnsSellerProfile(tx, sellerProfileId, userId);
+
     await tx.sellerVerification.upsert({
       where: { sellerProfileId },
       create: {
@@ -140,9 +160,9 @@ export async function getSellerDashboardStats(sellerProfileId: string, userId: s
   };
 }
 
-export function updateStoreSettings(sellerProfileId: string, input: UpdateSellerSettingsInput) {
-  return db.sellerProfile.update({
-    where: { id: sellerProfileId },
+export async function updateStoreSettings(userId: string, sellerProfileId: string, input: UpdateSellerSettingsInput) {
+  const { count } = await db.sellerProfile.updateMany({
+    where: { id: sellerProfileId, userId },
     data: {
       storeName: sanitizeText(input.storeName),
       bio: sanitizeOptionalText(input.bio),
@@ -152,6 +172,9 @@ export function updateStoreSettings(sellerProfileId: string, input: UpdateSeller
       ...(input.bannerUrl && { bannerUrl: input.bannerUrl }),
     },
   });
+  if (count === 0) throw new NotFoundError("Seller profile");
+
+  return db.sellerProfile.findUniqueOrThrow({ where: { id: sellerProfileId } });
 }
 
 function findSellersWithUser(page: number, pageSize: number) {
@@ -190,6 +213,7 @@ async function reviewVerification(
   reviewerId: string,
   status: "VERIFIED" | "REJECTED",
   notes: string | undefined,
+  ipAddress?: string,
 ) {
   return db.$transaction(async (tx) => {
     const verification = await tx.sellerVerification.findUnique({ where: { sellerProfileId } });
@@ -215,6 +239,7 @@ async function reviewVerification(
         entityType: "SellerProfile",
         entityId: sellerProfileId,
         metadata: notes ? { notes } : undefined,
+        ipAddress,
       },
     });
 
@@ -232,15 +257,15 @@ async function reviewVerification(
   });
 }
 
-export function approveVerification(sellerProfileId: string, reviewerId: string, notes?: string) {
-  return reviewVerification(sellerProfileId, reviewerId, "VERIFIED", notes);
+export function approveVerification(sellerProfileId: string, reviewerId: string, notes?: string, ipAddress?: string) {
+  return reviewVerification(sellerProfileId, reviewerId, "VERIFIED", notes, ipAddress);
 }
 
-export function rejectVerification(sellerProfileId: string, reviewerId: string, notes?: string) {
-  return reviewVerification(sellerProfileId, reviewerId, "REJECTED", notes);
+export function rejectVerification(sellerProfileId: string, reviewerId: string, notes?: string, ipAddress?: string) {
+  return reviewVerification(sellerProfileId, reviewerId, "REJECTED", notes, ipAddress);
 }
 
-export async function suspendSeller(sellerProfileId: string, adminId: string, notes?: string) {
+export async function suspendSeller(sellerProfileId: string, adminId: string, notes?: string, ipAddress?: string) {
   return db.$transaction(async (tx) => {
     const profile = await tx.sellerProfile.update({
       where: { id: sellerProfileId },
@@ -253,6 +278,7 @@ export async function suspendSeller(sellerProfileId: string, adminId: string, no
         entityType: "SellerProfile",
         entityId: sellerProfileId,
         metadata: notes ? { notes } : undefined,
+        ipAddress,
       },
     });
     await createNotification(
@@ -265,14 +291,14 @@ export async function suspendSeller(sellerProfileId: string, adminId: string, no
   });
 }
 
-export async function reinstateSeller(sellerProfileId: string, adminId: string) {
+export async function reinstateSeller(sellerProfileId: string, adminId: string, ipAddress?: string) {
   return db.$transaction(async (tx) => {
     const profile = await tx.sellerProfile.update({
       where: { id: sellerProfileId },
       data: { verificationStatus: "VERIFIED" },
     });
     await tx.auditLog.create({
-      data: { actorId: adminId, action: "SELLER_REINSTATED", entityType: "SellerProfile", entityId: sellerProfileId },
+      data: { actorId: adminId, action: "SELLER_REINSTATED", entityType: "SellerProfile", entityId: sellerProfileId, ipAddress },
     });
     await createNotification(profile.userId, "SYSTEM", "Your store has been reinstated", "You're back live on Selecta.");
     return profile;

@@ -192,6 +192,11 @@ model User {
   avatarUrl       String?    @map("avatar_url")
   role            Role       @default(BUYER)
   status          UserStatus @default(ACTIVE)
+  /// Individually-granted permission strings — only meaningful when role
+  /// is ADMIN. SUPER_ADMIN's authority is implicit (wildcard, never
+  /// stored); SELLER/BUYER get a fixed role-wide set defined in code, not
+  /// per-user grants. See lib/auth/permissions.ts.
+  permissions     String[]   @default([])
   city            String?
   state           String?
   preferences     Json?

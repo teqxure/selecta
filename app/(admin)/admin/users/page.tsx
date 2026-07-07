@@ -1,11 +1,11 @@
-import { requireRole } from "@/lib/auth/rbac";
-import { Role, ROLE_LABELS, USER_STATUS_LABELS } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
+import { ROLE_LABELS, USER_STATUS_LABELS } from "@/lib/constants/roles";
 import { listUsers } from "@/services/users/user.service";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 
 export default async function AdminUsersPage() {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("users.manage");
   const { items: users, totalCount } = await listUsers();
 
   return (

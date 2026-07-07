@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { listProductsForAdmin } from "@/services/products/product.service";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
@@ -16,7 +15,7 @@ export default async function AdminProductsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("products.moderate");
   const { status } = await searchParams;
   const activeStatus = status && STATUS_TABS.includes(status as (typeof STATUS_TABS)[number]) ? status : "PENDING_REVIEW";
   const { items: products, totalCount } = await listProductsForAdmin(activeStatus);

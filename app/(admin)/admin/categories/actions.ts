@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { categorySchema } from "@/lib/validators/category";
 import { createCategory, deleteCategory, setCategoryActive, updateCategory } from "@/services/categories/category.service";
 import { isAppError } from "@/lib/errors";
@@ -17,7 +16,7 @@ export async function createCategoryAction(
   _prevState: CategoryActionState,
   formData: FormData,
 ): Promise<CategoryActionState> {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("content.manage");
 
   const parsed = categorySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: z.prettifyError(parsed.error) };
@@ -38,7 +37,7 @@ export async function updateCategoryAction(
   _prevState: CategoryActionState,
   formData: FormData,
 ): Promise<CategoryActionState> {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("content.manage");
 
   const parsed = categorySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: z.prettifyError(parsed.error) };
@@ -55,7 +54,7 @@ export async function updateCategoryAction(
 }
 
 export async function toggleCategoryActiveAction(formData: FormData) {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("content.manage");
   const id = String(formData.get("categoryId"));
   const isActive = formData.get("isActive") === "true";
   await setCategoryActive(id, !isActive);
@@ -63,7 +62,7 @@ export async function toggleCategoryActiveAction(formData: FormData) {
 }
 
 export async function deleteCategoryAction(formData: FormData) {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("content.manage");
   const id = String(formData.get("categoryId"));
   await deleteCategory(id);
   revalidatePath(ROUTES.admin.categories);

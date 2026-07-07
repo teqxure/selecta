@@ -1,32 +1,34 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { suspendSeller, reinstateSeller, assignAgent } from "@/services/sellers/seller.service";
+import { getRequestMeta } from "@/lib/security/request-meta";
 import { ROUTES } from "@/lib/constants/routes";
 
 export async function suspendSellerAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  const admin = await requirePermission("vendors.manage");
   const sellerProfileId = String(formData.get("sellerProfileId"));
   const notes = String(formData.get("notes") || "") || undefined;
-  await suspendSeller(sellerProfileId, session.userId, notes);
+  const { ipAddress } = await getRequestMeta();
+  await suspendSeller(sellerProfileId, admin.id, notes, ipAddress);
   revalidatePath(ROUTES.admin.seller(sellerProfileId));
   revalidatePath(ROUTES.admin.sellers);
 }
 
 export async function reinstateSellerAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  const admin = await requirePermission("vendors.manage");
   const sellerProfileId = String(formData.get("sellerProfileId"));
-  await reinstateSeller(sellerProfileId, session.userId);
+  const { ipAddress } = await getRequestMeta();
+  await reinstateSeller(sellerProfileId, admin.id, ipAddress);
   revalidatePath(ROUTES.admin.seller(sellerProfileId));
   revalidatePath(ROUTES.admin.sellers);
 }
 
 export async function assignAgentAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  const admin = await requirePermission("vendors.manage");
   const sellerProfileId = String(formData.get("sellerProfileId"));
   const agentUserId = String(formData.get("agentUserId") || "") || null;
-  await assignAgent(sellerProfileId, agentUserId, session.userId);
+  await assignAgent(sellerProfileId, agentUserId, admin.id);
   revalidatePath(ROUTES.admin.seller(sellerProfileId));
 }

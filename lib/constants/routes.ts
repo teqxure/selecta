@@ -52,6 +52,8 @@ export const ROUTES = {
     orders: "/admin/orders",
     order: (id: string) => `/admin/orders/${id}`,
     settings: "/admin/settings",
+    admins: "/admin/admins",
+    adminDetail: (id: string) => `/admin/admins/${id}`,
     integrations: "/admin/integrations",
     commissions: "/admin/commissions",
     featureFlags: "/admin/feature-flags",

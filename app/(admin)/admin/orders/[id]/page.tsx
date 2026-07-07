@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth/rbac";
-import { Role } from "@/lib/constants/roles";
+import { requirePermission } from "@/lib/auth/rbac";
 import { getOrderDetailForAdmin } from "@/services/orders/order.service";
 import { isAppError } from "@/lib/errors";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -24,7 +23,7 @@ const ALL_STATUSES = [
 ] as const;
 
 export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+  await requirePermission("orders.manage");
   const { id } = await params;
 
   let order;

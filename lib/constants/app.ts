@@ -9,5 +9,11 @@ export const PAGINATION = {
 
 export const SESSION_COOKIE_NAME = "selecta_session";
 
-/** How long an issued session JWT remains valid. */
+/** "Remember me" session lifetime. */
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+/** Default session lifetime when "remember me" is not checked. */
+export const SHORT_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24; // 1 day
+
+/** Reissue the session cookie in proxy.ts once less than this much validity remains. */
+export const SESSION_REFRESH_THRESHOLD_SECONDS = 60 * 60 * 12; // 12 hours

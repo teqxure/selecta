@@ -51,3 +51,19 @@ export async function getOrderById(id: string) {
   if (!order) throw new NotFoundError("Order");
   return order;
 }
+
+export function listOrdersForBuyer(buyerId: string) {
+  return db.order.findMany({
+    where: { buyerId },
+    include: { items: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function listOrdersForSeller(sellerId: string) {
+  return db.order.findMany({
+    where: { items: { some: { product: { sellerId } } } },
+    include: { items: { include: { product: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+}

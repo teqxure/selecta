@@ -19,6 +19,10 @@ export async function createProduct(sellerId: string, input: CreateProductInput)
   });
 }
 
+export function listProductsBySeller(sellerId: string) {
+  return db.product.findMany({ where: { sellerId }, orderBy: { createdAt: "desc" } });
+}
+
 export async function getProductById(id: string) {
   const product = await db.product.findUnique({ where: { id } });
   if (!product) throw new NotFoundError("Product");

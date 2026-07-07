@@ -6,14 +6,33 @@ export const ROUTES = {
   home: "/",
   login: "/login",
   register: "/register",
+  profile: "/profile",
+  orders: "/orders",
+  saved: "/saved",
   seller: {
     root: "/seller",
     dashboard: "/seller",
+    products: "/seller/products",
+    orders: "/seller/orders",
+    wallet: "/seller/wallet",
+    settings: "/seller/settings",
+    onboarding: {
+      personal: "/seller/onboarding/personal",
+      store: "/seller/onboarding/store",
+      verification: "/seller/onboarding/verification",
+    },
   },
   admin: {
     root: "/admin",
+    users: "/admin/users",
+    sellers: "/admin/sellers",
+    verificationQueue: "/admin/verification-queue",
   },
 } as const;
 
-/** Route prefixes that require an authenticated session (checked in proxy.ts). */
-export const PROTECTED_PREFIXES = ["/seller", "/admin"] as const;
+/**
+ * Route prefixes that require *some* authenticated session, regardless of
+ * role. Checked in proxy.ts alongside the role-specific ROUTE_ROLE_ACCESS
+ * table in lib/constants/roles.ts.
+ */
+export const AUTH_REQUIRED_PREFIXES = ["/profile", "/orders", "/saved"] as const;

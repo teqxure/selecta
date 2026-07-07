@@ -31,6 +31,22 @@ enum SellerVerificationStatus {
   SUSPENDED
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum SellerProductType {
+  MALE_CLOTHES
+  FEMALE_CLOTHES
+  CHILDREN_CLOTHES
+  SHOES
+  BAGS
+  ACCESSORIES
+}
+
 enum ProductStatus {
   DRAFT
   ACTIVE
@@ -77,50 +93,141 @@ enum NotificationType {
 // ---------------------------------------------------------------------------
 
 model User {
-  id              String    @id @default(cuid())
-  email           String    @unique
-  phone           String?   @unique
-  passwordHash    String?   @map("password_hash")
-  firstName       String    @map("first_name")
-  lastName        String    @map("last_name")
-  avatarUrl       String?   @map("avatar_url")
-  role            Role      @default(BUYER)
-  isActive        Boolean   @default(true) @map("is_active")
-  emailVerifiedAt DateTime? @map("email_verified_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id              String     @id @default(cuid())
+  email           String     @unique
+  phone           String?    @unique
+  passwordHash    String?    @map("password_hash")
+  firstName       String     @map("first_name")
+  lastName        String     @map("last_name")
+  avatarUrl       String?    @map("avatar_url")
+  role            Role       @default(BUYER)
+  status          UserStatus @default(ACTIVE)
+  city            String?
+  state           String?
+  preferences     Json?
+  emailVerifiedAt DateTime?  @map("email_verified_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
-  sellerProfile SellerProfile?
-  wallet        Wallet?
-  orders        Order[]
-  reviews       Review[]
-  notifications Notification[]
-  deliveries    Delivery[]      @relation("AgentDeliveries")
-  auditLogs     AuditLog[]
+  sellerProfile   SellerProfile?
+  wallet          Wallet?
+  orders          Order[]
+  reviews         Review[]
+  notifications   Notification[]
+  deliveries      Delivery[]      @relation("AgentDeliveries")
+  auditLogs       AuditLog[]
+  addresses       Address[]
+  activities      UserActivity[]
+  loginHistory    LoginHistory[]
+  assignedSellers SellerProfile[] @relation("SellerAgent")
 
   @@index([role])
+  @@index([status])
   @@map("users")
 }
 
 model SellerProfile {
-  id                 String                   @id @default(cuid())
-  userId             String                   @unique @map("user_id")
-  businessName       String                   @map("business_name")
-  bio                String?
-  city               String?
-  state              String?
-  country            String                   @default("Nigeria")
-  verificationStatus SellerVerificationStatus @default(PENDING) @map("verification_status")
-  ratingAverage      Float                    @default(0) @map("rating_average")
-  ratingCount        Int                      @default(0) @map("rating_count")
-  createdAt          DateTime                 @default(now()) @map("created_at")
-  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  id                    String                   @id @default(cuid())
+  userId                String                   @unique @map("user_id")
+  businessName          String                   @map("business_name")
+  storeName             String?                  @map("store_name")
+  bio                   String?
+  marketLocation        String?                  @map("market_location")
+  city                  String?
+  state                 String?
+  country               String                   @default("Nigeria")
+  categoryTags          SellerProductType[]      @map("category_tags")
+  verificationStatus    SellerVerificationStatus @default(PENDING) @map("verification_status")
+  ratingAverage         Float                    @default(0) @map("rating_average")
+  ratingCount           Int                      @default(0) @map("rating_count")
+  totalSales            Int                      @default(0) @map("total_sales")
+  onboardingStep        Int                      @default(1) @map("onboarding_step")
+  onboardingCompletedAt DateTime?                @map("onboarding_completed_at")
+  agentId               String?                  @map("agent_id")
+  createdAt             DateTime                 @default(now()) @map("created_at")
+  updatedAt             DateTime                 @updatedAt @map("updated_at")
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  products Product[]
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent        User?               @relation("SellerAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  products     Product[]
+  verification SellerVerification?
 
   @@index([verificationStatus])
+  @@index([agentId])
   @@map("seller_profiles")
+}
+
+/// Seller onboarding step 3 submission: documents + admin review trail.
+/// `SellerProfile.verificationStatus` is a denormalized copy of `status`
+/// here, kept in sync by the seller-verification service, so RBAC/UI checks
+/// never need to join into this table.
+model SellerVerification {
+  id                  String                   @id @default(cuid())
+  sellerProfileId     String                   @unique @map("seller_profile_id")
+  businessPhotoUrl    String?                  @map("business_photo_url")
+  shopPhotoUrl        String?                  @map("shop_photo_url")
+  identityDocumentUrl String?                  @map("identity_document_url")
+  status              SellerVerificationStatus @default(PENDING)
+  reviewedById        String?                  @map("reviewed_by_id")
+  reviewNotes         String?                  @map("review_notes")
+  submittedAt         DateTime                 @default(now()) @map("submitted_at")
+  reviewedAt          DateTime?                @map("reviewed_at")
+
+  sellerProfile SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("seller_verifications")
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  label     String?
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  country   String   @default("Nigeria")
+  phone     String?
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+/// Lightweight behavioral event stream (logins, views, profile edits).
+/// Distinct from `AuditLog`, which is the admin-facing security/audit trail
+/// keyed by entity rather than by user.
+model UserActivity {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_activities")
+}
+
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  success   Boolean
+  reason    String?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("login_history")
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,10 @@ export default function LoginPage() {
         <form action={formAction} className="flex flex-col gap-4">
           <Input name="email" type="email" label="Email" required />
           <Input name="password" type="password" label="Password" required />
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" name="rememberMe" className="h-4 w-4 rounded border-border accent-accent" />
+            Remember me for 30 days
+          </label>
           <FormError message={state.error} />
           <SubmitButton className="w-full">Log in</SubmitButton>
         </form>

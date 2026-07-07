@@ -2,7 +2,12 @@ import type { ReactNode } from "react";
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
 
-const ADMIN_NAV = [{ label: "Command Center", href: ROUTES.admin.root }];
+const ADMIN_NAV = [
+  { label: "Command Center", href: ROUTES.admin.root },
+  { label: "Users", href: ROUTES.admin.users },
+  { label: "Sellers", href: ROUTES.admin.sellers },
+  { label: "Verification queue", href: ROUTES.admin.verificationQueue },
+];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (

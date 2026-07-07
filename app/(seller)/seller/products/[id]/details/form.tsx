@@ -22,6 +22,7 @@ interface DetailsFormDefaults {
   subcategoryId: string;
   brand: string;
   color: string;
+  material: string;
   gender: string;
   size: string;
   conditionGrade: string;
@@ -111,6 +112,13 @@ export function DetailsForm({
             <Input name="brand" label="Brand (optional)" defaultValue={defaults.brand} />
             <Input name="color" label="Color (optional)" defaultValue={defaults.color} />
           </div>
+
+          <Input
+            name="material"
+            label="Material (optional)"
+            defaultValue={defaults.material}
+            placeholder="e.g. Cotton, Leather, Ankara"
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">

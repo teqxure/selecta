@@ -4,7 +4,13 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { sanitizeOptionalText, sanitizeText } from "@/lib/security/sanitize";
 import { createNotification } from "@/services/notifications/notification.service";
 import { PAGINATION } from "@/lib/constants/app";
-import type { ProductDetailsInput, ProductImagesInput, ProductPricingInput, SearchFilters } from "@/lib/validators/product";
+import type {
+  ProductDetailsInput,
+  ProductImagesInput,
+  ProductLocationInput,
+  ProductPricingInput,
+  SearchFilters,
+} from "@/lib/validators/product";
 import type { PaginatedResult } from "@/types";
 
 const MIN_IMAGES = 2;
@@ -92,6 +98,7 @@ export async function updateProductDetails(sellerProfileId: string, productId: s
       subcategoryId: input.subcategoryId || null,
       brand: sanitizeOptionalText(input.brand),
       color: sanitizeOptionalText(input.color),
+      material: sanitizeOptionalText(input.material),
       gender: input.gender || null,
       size: sanitizeOptionalText(input.size),
       conditionGrade: input.conditionGrade,
@@ -104,7 +111,40 @@ export async function updateProductPricing(sellerProfileId: string, productId: s
 
   return db.product.update({
     where: { id: productId },
-    data: { price: input.price, discountPrice: input.discountPrice ?? null },
+    data: {
+      price: input.price,
+      discountPrice: input.discountPrice ?? null,
+      estimatedValue: input.estimatedValue ?? null,
+    },
+  });
+}
+
+/** "Similar products sell between ₦X - ₦Y" — a cheap p25/p75-ish range from active listings in the same category. */
+export async function getSuggestedPriceRange(categoryId: string) {
+  const prices = await db.product.findMany({
+    where: { categoryId, status: "ACTIVE" },
+    select: { price: true },
+    orderBy: { price: "asc" },
+  });
+  if (prices.length < 3) return null;
+
+  const values = prices.map((p) => Number(p.price));
+  const low = values[Math.floor(values.length * 0.25)];
+  const high = values[Math.ceil(values.length * 0.75) - 1];
+  return { low, high };
+}
+
+export async function updateProductLocation(sellerProfileId: string, productId: string, input: ProductLocationInput) {
+  await getOwnedProduct(sellerProfileId, productId);
+
+  return db.product.update({
+    where: { id: productId },
+    data: {
+      state: sanitizeText(input.state),
+      city: sanitizeText(input.city),
+      market: sanitizeOptionalText(input.market),
+      pickupLocation: sanitizeOptionalText(input.pickupLocation),
+    },
   });
 }
 
@@ -129,9 +169,18 @@ export async function publishProduct(sellerProfileId: string, productId: string)
 // Seller: inventory management
 // ---------------------------------------------------------------------------
 
-export function listProductsBySeller(sellerId: string) {
+export interface SellerInventoryFilters {
+  q?: string;
+  status?: "ACTIVE" | "PENDING_REVIEW" | "SOLD" | "REJECTED" | "PAUSED" | "DRAFT";
+}
+
+export function listProductsBySeller(sellerId: string, filters: SellerInventoryFilters = {}) {
   return db.product.findMany({
-    where: { sellerId, status: { not: "REMOVED" } },
+    where: {
+      sellerId,
+      status: filters.status ?? { not: "REMOVED" },
+      ...(filters.q && { title: { contains: filters.q, mode: "insensitive" } }),
+    },
     include: cardInclude,
     orderBy: { createdAt: "desc" },
   });
@@ -356,11 +405,26 @@ export function getSimilarProducts(product: { id: string; categoryId: string }, 
   });
 }
 
+const VIEW_MILESTONES = [100, 500, 1000, 5000, 10000];
+
 export async function recordView(productId: string, userId?: string) {
-  await db.$transaction([
-    db.product.update({ where: { id: productId }, data: { viewCount: { increment: 1 } } }),
+  const [product] = await db.$transaction([
+    db.product.update({
+      where: { id: productId },
+      data: { viewCount: { increment: 1 } },
+      include: { seller: true },
+    }),
     db.productEvent.create({ data: { productId, userId, type: "VIEW" } }),
   ]);
+
+  if (VIEW_MILESTONES.includes(product.viewCount)) {
+    await createNotification(
+      product.seller.userId,
+      "SYSTEM",
+      "Your product is getting noticed!",
+      `"${product.title}" just hit ${product.viewCount} views.`,
+    );
+  }
 }
 
 export async function recordShare(productId: string, userId?: string) {

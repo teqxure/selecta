@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { Search, ShoppingBag, LogOut } from "lucide-react";
+import { Search, ShoppingBag, LogOut, Bell } from "lucide-react";
 import { ROUTES } from "@/lib/constants/routes";
 import { APP_NAME } from "@/lib/constants/app";
 import { currentUser } from "@/lib/auth/current-user";
 import { logoutAction } from "@/app/(auth)/actions";
+import { getUnreadNotificationCount } from "@/services/notifications/notification.service";
 import { Button } from "@/components/ui/Button";
 
 export async function Navbar() {
   const user = await currentUser();
+  const unreadCount = user ? await getUnreadNotificationCount(user.id) : 0;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
@@ -45,6 +47,16 @@ export async function Navbar() {
         <div className="ml-auto flex items-center gap-3 md:ml-0">
           {user ? (
             <>
+              <Link
+                href={ROUTES.notifications}
+                aria-label="Notifications"
+                className="relative flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Bell className="h-4.5 w-4.5" strokeWidth={2} />
+                {unreadCount > 0 && (
+                  <span className="absolute right-1 top-1 flex h-2 w-2 rounded-full bg-accent" />
+                )}
+              </Link>
               <Link
                 href={ROUTES.cart}
                 aria-label="Cart"

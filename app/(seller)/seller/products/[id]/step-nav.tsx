@@ -6,8 +6,8 @@ import { Stepper } from "@/components/ui/Stepper";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils";
 
-const STEP_SEGMENTS = ["images", "details", "pricing", "review"] as const;
-const STEP_LABELS = ["Photos", "Details", "Pricing", "Review"];
+const STEP_SEGMENTS = ["images", "details", "pricing", "location", "review"] as const;
+const STEP_LABELS = ["Photos", "Details", "Pricing", "Location", "Review"];
 
 export function StepNav({ productId, isDraft }: { productId: string; isDraft: boolean }) {
   const segment = useSelectedLayoutSegment();
@@ -21,6 +21,7 @@ export function StepNav({ productId, isDraft }: { productId: string; isDraft: bo
     { label: "Photos", href: ROUTES.seller.productImages(productId) },
     { label: "Details", href: ROUTES.seller.productDetails(productId) },
     { label: "Pricing", href: ROUTES.seller.productPricing(productId) },
+    { label: "Location", href: ROUTES.seller.productLocation(productId) },
   ];
 
   return (

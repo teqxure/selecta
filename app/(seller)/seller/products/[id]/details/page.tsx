@@ -31,6 +31,7 @@ export default async function ProductDetailsPage({ params }: { params: Promise<{
           subcategoryId: product.subcategoryId ?? "",
           brand: product.brand ?? "",
           color: product.color ?? "",
+          material: product.material ?? "",
           gender: product.gender ?? "",
           size: product.size ?? "",
           conditionGrade: product.conditionGrade,

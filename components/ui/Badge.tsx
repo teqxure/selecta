@@ -44,7 +44,7 @@ export const CONDITION_GRADE_TONE: Record<string, BadgeProps["tone"]> = {
 };
 
 export const CONDITION_GRADE_SHORT_LABELS: Record<string, string> = {
-  SELECTA_GOLD: "Selecta Gold",
+  SELECTA_GOLD: "Selecta Premium",
   SELECTA_CLASSIC: "Selecta Classic",
   SELECTA_VALUE: "Selecta Value",
 };

@@ -10,6 +10,7 @@ export interface ImageUploadFieldProps {
   folder: string;
   required?: boolean;
   helperText?: string;
+  defaultUrl?: string;
 }
 
 /**
@@ -19,8 +20,8 @@ export interface ImageUploadFieldProps {
  * input named `name`, so this composes with a plain Server Action the same
  * way any other form field does.
  */
-export function ImageUploadField({ name, label, folder, required, helperText }: ImageUploadFieldProps) {
-  const [publicUrl, setPublicUrl] = useState<string | null>(null);
+export function ImageUploadField({ name, label, folder, required, helperText, defaultUrl }: ImageUploadFieldProps) {
+  const [publicUrl, setPublicUrl] = useState<string | null>(defaultUrl ?? null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 

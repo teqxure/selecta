@@ -21,6 +21,7 @@ export async function updateProductPricingAction(
 
   const raw = Object.fromEntries(formData);
   const parsed = productPricingSchema.safeParse({
+    estimatedValue: raw.estimatedValue ? Number(raw.estimatedValue) : undefined,
     price: raw.price ? Number(raw.price) : undefined,
     discountPrice: raw.discountPrice ? Number(raw.discountPrice) : undefined,
   });
@@ -38,6 +39,6 @@ export async function updateProductPricingAction(
   }
 
   revalidatePath(ROUTES.seller.productPricing(productId));
-  if (isDraft) redirect(ROUTES.seller.productReview(productId));
+  if (isDraft) redirect(ROUTES.seller.productLocation(productId));
   return {};
 }

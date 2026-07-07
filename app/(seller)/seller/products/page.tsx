@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { PackagePlus } from "lucide-react";
+import { PackagePlus, Search } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
@@ -8,16 +8,33 @@ import { listProductsBySeller, getProductStatusCounts } from "@/services/product
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ROUTES } from "@/lib/constants/routes";
+import { cn } from "@/lib/utils";
 import { pauseProductAction, resumeProductAction, deleteProductAction, duplicateProductAction } from "./actions";
 
-export default async function SellerProductsPage() {
+const STATUS_TABS = [
+  { label: "All", value: undefined },
+  { label: "Active", value: "ACTIVE" },
+  { label: "Pending", value: "PENDING_REVIEW" },
+  { label: "Sold", value: "SOLD" },
+  { label: "Rejected", value: "REJECTED" },
+] as const;
+
+export default async function SellerProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; status?: string }>;
+}) {
   const session = await requireRole(Role.SELLER);
+  const { q, status } = await searchParams;
+  const activeStatus = STATUS_TABS.find((tab) => tab.value === status)?.value;
+
   const profile = await getSellerProfileByUserId(session.userId);
   const [products, counts] = await Promise.all([
-    listProductsBySeller(profile.id),
+    listProductsBySeller(profile.id, { q, status: activeStatus }),
     getProductStatusCounts(profile.id),
   ]);
 
@@ -40,11 +57,39 @@ export default async function SellerProductsPage() {
         <StatCard label="Rejected" value={String(counts.rejected)} />
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav className="flex flex-wrap gap-2">
+          {STATUS_TABS.map((tab) => (
+            <Link
+              key={tab.label}
+              href={tab.value ? `${ROUTES.seller.products}?status=${tab.value}` : ROUTES.seller.products}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-sm font-medium",
+                activeStatus === tab.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
+        <form action={ROUTES.seller.products} method="GET" className="flex items-center gap-2">
+          {activeStatus && <input type="hidden" name="status" value={activeStatus} />}
+          <Input name="q" defaultValue={q ?? ""} placeholder="Search your inventory…" className="w-56" />
+          <Button type="submit" size="md" variant="secondary" aria-label="Search">
+            <Search className="h-4 w-4" strokeWidth={2} />
+          </Button>
+        </form>
+      </div>
+
       {products.length === 0 ? (
         <EmptyState
           icon={PackagePlus}
-          title="Your rail is empty."
-          description="List your first piece and start reaching Selecta buyers today."
+          title={q || activeStatus ? "Nothing matches that filter." : "Your rail is empty."}
+          description={
+            q || activeStatus
+              ? "Try a different search term or status."
+              : "List your first piece and start reaching Selecta buyers today."
+          }
           action={{ label: "Create a listing", href: ROUTES.seller.newProduct }}
         />
       ) : (

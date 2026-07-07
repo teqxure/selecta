@@ -6,10 +6,12 @@ import {
   ProductImageKind,
 } from "@/generated/prisma/enums";
 
+// Display copy only — the underlying enum value stays SELECTA_GOLD (no
+// migration needed) while the brand-facing label is "Selecta Premium".
 export const CONDITION_GRADE_LABELS: Record<ConditionGrade, string> = {
-  SELECTA_GOLD: "Selecta Gold — almost new, premium find",
+  SELECTA_GOLD: "Selecta Premium — almost new",
   SELECTA_CLASSIC: "Selecta Classic — excellent condition",
-  SELECTA_VALUE: "Selecta Value — affordable everyday piece",
+  SELECTA_VALUE: "Selecta Value — good everyday wear",
 };
 
 export const GENDER_LABELS: Record<ProductGender, string> = {
@@ -51,6 +53,7 @@ export const productDetailsSchema = z.object({
   subcategoryId: z.string().optional().or(z.literal("")),
   brand: z.string().max(60).optional().or(z.literal("")),
   color: z.string().max(40).optional().or(z.literal("")),
+  material: z.string().max(60).optional().or(z.literal("")),
   gender: z.enum(ProductGender).optional().or(z.literal("")),
   size: z.string().max(30).optional().or(z.literal("")),
   conditionGrade: z.enum(ConditionGrade),
@@ -59,6 +62,7 @@ export const productDetailsSchema = z.object({
 /** Step 3 — pricing. */
 export const productPricingSchema = z
   .object({
+    estimatedValue: moneySchema.optional(),
     price: moneySchema,
     discountPrice: moneySchema.optional(),
   })
@@ -67,9 +71,18 @@ export const productPricingSchema = z
     path: ["discountPrice"],
   });
 
+/** Step 4 — location (defaults come from the seller's own profile). */
+export const productLocationSchema = z.object({
+  state: z.string().min(1, "State is required").max(60),
+  city: z.string().min(1, "City is required").max(60),
+  market: z.string().max(120).optional().or(z.literal("")),
+  pickupLocation: z.string().max(200).optional().or(z.literal("")),
+});
+
 export type ProductImagesInput = z.infer<typeof productImagesSchema>;
 export type ProductDetailsInput = z.infer<typeof productDetailsSchema>;
 export type ProductPricingInput = z.infer<typeof productPricingSchema>;
+export type ProductLocationInput = z.infer<typeof productLocationSchema>;
 
 export const searchFiltersSchema = z.object({
   q: z.string().max(120).optional(),

@@ -34,12 +34,40 @@ export async function completePersonalInfoStep(userId: string, sellerProfileId: 
   });
 }
 
+function slugify(text: string) {
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "store"
+  );
+}
+
+/** Appends -2, -3, ... until the slug is free — storeSlug is the storefront's URL, so it must be globally unique. */
+async function generateUniqueStoreSlug(storeName: string, sellerProfileId: string) {
+  const base = slugify(storeName);
+  let slug = base;
+  let suffix = 1;
+
+  while (true) {
+    const existing = await db.sellerProfile.findUnique({ where: { storeSlug: slug } });
+    if (!existing || existing.id === sellerProfileId) return slug;
+    suffix += 1;
+    slug = `${base}-${suffix}`;
+  }
+}
+
 /** Onboarding step 2: the store itself. */
-export function completeStoreSetupStep(sellerProfileId: string, input: StoreSetupInput) {
+export async function completeStoreSetupStep(sellerProfileId: string, input: StoreSetupInput) {
+  const storeName = sanitizeText(input.storeName);
+  const storeSlug = await generateUniqueStoreSlug(storeName, sellerProfileId);
+
   return db.sellerProfile.update({
     where: { id: sellerProfileId },
     data: {
-      storeName: sanitizeText(input.storeName),
+      storeName,
+      storeSlug,
       marketLocation: sanitizeText(input.marketLocation),
       city: sanitizeText(input.city),
       state: sanitizeText(input.state),
@@ -121,6 +149,7 @@ export function updateStoreSettings(sellerProfileId: string, input: UpdateSeller
       marketLocation: sanitizeText(input.marketLocation),
       city: sanitizeText(input.city),
       state: sanitizeText(input.state),
+      ...(input.bannerUrl && { bannerUrl: input.bannerUrl }),
     },
   });
 }
@@ -209,4 +238,94 @@ export function approveVerification(sellerProfileId: string, reviewerId: string,
 
 export function rejectVerification(sellerProfileId: string, reviewerId: string, notes?: string) {
   return reviewVerification(sellerProfileId, reviewerId, "REJECTED", notes);
+}
+
+export async function suspendSeller(sellerProfileId: string, adminId: string, notes?: string) {
+  return db.$transaction(async (tx) => {
+    const profile = await tx.sellerProfile.update({
+      where: { id: sellerProfileId },
+      data: { verificationStatus: "SUSPENDED" },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId: adminId,
+        action: "SELLER_SUSPENDED",
+        entityType: "SellerProfile",
+        entityId: sellerProfileId,
+        metadata: notes ? { notes } : undefined,
+      },
+    });
+    await createNotification(
+      profile.userId,
+      "SYSTEM",
+      "Your store has been suspended",
+      notes ?? "Your store has been suspended by Selecta. Contact support for details.",
+    );
+    return profile;
+  });
+}
+
+export async function reinstateSeller(sellerProfileId: string, adminId: string) {
+  return db.$transaction(async (tx) => {
+    const profile = await tx.sellerProfile.update({
+      where: { id: sellerProfileId },
+      data: { verificationStatus: "VERIFIED" },
+    });
+    await tx.auditLog.create({
+      data: { actorId: adminId, action: "SELLER_REINSTATED", entityType: "SellerProfile", entityId: sellerProfileId },
+    });
+    await createNotification(profile.userId, "SYSTEM", "Your store has been reinstated", "You're back live on Selecta.");
+    return profile;
+  });
+}
+
+export async function assignAgent(sellerProfileId: string, agentUserId: string | null, adminId: string) {
+  const profile = await db.sellerProfile.update({ where: { id: sellerProfileId }, data: { agentId: agentUserId } });
+  await db.auditLog.create({
+    data: {
+      actorId: adminId,
+      action: agentUserId ? "AGENT_ASSIGNED" : "AGENT_UNASSIGNED",
+      entityType: "SellerProfile",
+      entityId: sellerProfileId,
+      metadata: agentUserId ? { agentUserId } : undefined,
+    },
+  });
+  return profile;
+}
+
+export function listAgents() {
+  return db.user.findMany({ where: { role: "AGENT" }, orderBy: { firstName: "asc" } });
+}
+
+// ---------------------------------------------------------------------------
+// Public storefront
+// ---------------------------------------------------------------------------
+
+export async function getStoreBySlug(slug: string) {
+  const profile = await db.sellerProfile.findUnique({
+    where: { storeSlug: slug },
+    include: {
+      user: true,
+      products: {
+        where: { status: "ACTIVE" },
+        include: { images: { orderBy: { position: "asc" }, take: 1 } },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+  if (!profile) throw new NotFoundError("Store");
+  return profile;
+}
+
+export async function recordStoreView(sellerProfileId: string) {
+  await db.sellerProfile.update({ where: { id: sellerProfileId }, data: { profileViewCount: { increment: 1 } } });
+}
+
+export function getStoreReviews(sellerProfileId: string) {
+  return db.review.findMany({
+    where: { product: { sellerId: sellerProfileId } },
+    include: { author: true, product: { select: { title: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
 }

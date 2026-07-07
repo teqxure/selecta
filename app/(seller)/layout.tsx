@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LayoutGrid, Package, ShoppingCart, Wallet, Store } from "lucide-react";
+import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3 } from "lucide-react";
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
 import { currentUser } from "@/lib/auth/current-user";
@@ -10,6 +10,9 @@ const SELLER_NAV = [
   { label: "Dashboard", href: ROUTES.seller.dashboard, icon: LayoutGrid },
   { label: "Products", href: ROUTES.seller.products, icon: Package },
   { label: "Orders", href: ROUTES.seller.orders, icon: ShoppingCart },
+  { label: "Customers", href: ROUTES.seller.customers, icon: Users },
+  { label: "Messages", href: ROUTES.seller.messages, icon: MessageCircle },
+  { label: "Analytics", href: ROUTES.seller.analytics, icon: BarChart3 },
   { label: "Wallet", href: ROUTES.seller.wallet, icon: Wallet },
   { label: "Store settings", href: ROUTES.seller.settings, icon: Store },
 ];

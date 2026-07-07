@@ -12,6 +12,9 @@ export const ROUTES = {
   cart: "/cart",
   search: "/search",
   product: (id: string) => `/products/${id}`,
+  store: (slug: string) => `/store/${slug}`,
+  messages: "/messages",
+  message: (id: string) => `/messages/${id}`,
   seller: {
     root: "/seller",
     dashboard: "/seller",
@@ -20,10 +23,15 @@ export const ROUTES = {
     productImages: (id: string) => `/seller/products/${id}/images`,
     productDetails: (id: string) => `/seller/products/${id}/details`,
     productPricing: (id: string) => `/seller/products/${id}/pricing`,
+    productLocation: (id: string) => `/seller/products/${id}/location`,
     productReview: (id: string) => `/seller/products/${id}/review`,
     orders: "/seller/orders",
     wallet: "/seller/wallet",
     settings: "/seller/settings",
+    customers: "/seller/customers",
+    messages: "/seller/messages",
+    message: (id: string) => `/seller/messages/${id}`,
+    analytics: "/seller/analytics",
     onboarding: {
       personal: "/seller/onboarding/personal",
       store: "/seller/onboarding/store",
@@ -34,10 +42,12 @@ export const ROUTES = {
     root: "/admin",
     users: "/admin/users",
     sellers: "/admin/sellers",
+    seller: (id: string) => `/admin/sellers/${id}`,
     verificationQueue: "/admin/verification-queue",
     categories: "/admin/categories",
     products: "/admin/products",
   },
+  notifications: "/notifications",
 } as const;
 
 /**
@@ -45,4 +55,4 @@ export const ROUTES = {
  * role. Checked in proxy.ts alongside the role-specific ROUTE_ROLE_ACCESS
  * table in lib/constants/roles.ts.
  */
-export const AUTH_REQUIRED_PREFIXES = ["/profile", "/orders", "/saved", "/cart"] as const;
+export const AUTH_REQUIRED_PREFIXES = ["/profile", "/orders", "/saved", "/cart", "/notifications", "/messages"] as const;

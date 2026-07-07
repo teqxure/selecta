@@ -69,7 +69,7 @@ export default async function MarketplaceHomePage() {
 
         <ProductSection
           title="Premium Finds"
-          subtitle="Selecta Gold — almost new, premium pieces"
+          subtitle="Selecta Premium — almost new pieces"
           seeAllHref={`${ROUTES.search}?conditionGrade=SELECTA_GOLD`}
         >
           <ProductGrid products={premiumFinds} savedIds={savedIds} />

@@ -15,6 +15,7 @@ export const updateSellerSettingsSchema = z.object({
   marketLocation: z.string().min(2).max(120),
   city: z.string().min(1).max(60),
   state: z.string().min(1).max(60),
+  bannerUrl: z.url().optional().or(z.literal("")),
 });
 
 export const addressSchema = z.object({

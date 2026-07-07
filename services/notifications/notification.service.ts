@@ -22,6 +22,15 @@ export function listNotifications(userId: string) {
   });
 }
 
-export function markAsRead(id: string) {
-  return db.notification.update({ where: { id }, data: { isRead: true } });
+/** Scoped to `{ id, userId }` so marking someone else's notification read by guessing an id is a no-op. */
+export async function markAsRead(id: string, userId: string) {
+  await db.notification.updateMany({ where: { id, userId }, data: { isRead: true } });
+}
+
+export async function markAllAsRead(userId: string) {
+  await db.notification.updateMany({ where: { userId, isRead: false }, data: { isRead: true } });
+}
+
+export function getUnreadNotificationCount(userId: string) {
+  return db.notification.count({ where: { userId, isRead: false } });
 }

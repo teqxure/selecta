@@ -10,6 +10,8 @@
   --color-midnight: #0b0b0d;
   --color-cream: #f5efe6;
   --color-burnt-orange: #c45a1f;
+  --color-burnt-orange-bright: #e2762f;
+  --color-gold: #cf9d4f;
 
   --background: var(--color-cream);
   --foreground: var(--color-midnight);
@@ -24,12 +26,18 @@
   --color-muted: #e7ded0;
   --color-muted-foreground: #6b6459;
   --color-border: #ddd3c2;
+
+  --shadow-card: 0 1px 2px rgba(11, 11, 13, 0.04), 0 8px 24px -12px rgba(11, 11, 13, 0.12);
+  --shadow-card-hover: 0 4px 8px rgba(11, 11, 13, 0.06), 0 16px 40px -12px rgba(11, 11, 13, 0.2);
+  --shadow-float: 0 20px 60px -20px rgba(11, 11, 13, 0.35);
 }
 
 @theme inline {
   --color-midnight: var(--color-midnight);
   --color-cream: var(--color-cream);
   --color-burnt-orange: var(--color-burnt-orange);
+  --color-burnt-orange-bright: var(--color-burnt-orange-bright);
+  --color-gold: var(--color-gold);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--color-primary);
@@ -43,6 +51,10 @@
   --color-border: var(--color-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+  --shadow-card: var(--shadow-card);
+  --shadow-card-hover: var(--shadow-card-hover);
+  --shadow-float: var(--shadow-float);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,6 +70,10 @@
     --color-muted: #1c1c21;
     --color-muted-foreground: #a3a099;
     --color-border: #29292f;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    --shadow-card-hover: 0 4px 8px rgba(0, 0, 0, 0.35), 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+    --shadow-float: 0 20px 60px -20px rgba(0, 0, 0, 0.7);
   }
 }
 
@@ -65,4 +81,34 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Editorial display type — headlines only, never body copy. */
+.font-display {
+  font-family: var(--font-display), var(--font-geist-sans), sans-serif;
+}
+
+/* Subtle grain texture for the hero — cheap, GPU-friendly, adds tactility
+   without an image asset. */
+.bg-grain {
+  position: relative;
+}
+.bg-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Hide scrollbar on horizontal-scroll rails (Style Collections, thumbnails)
+   while keeping the element natively scrollable/swipeable. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

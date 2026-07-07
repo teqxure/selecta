@@ -1,10 +1,19 @@
 import { type HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  /** Lifts on hover — use for clickable/browsable cards (product tiles, seller cards). */
+  hoverable?: boolean;
+}
+
+export function Card({ className, hoverable, ...props }: CardProps) {
   return (
     <div
-      className={cn("rounded-2xl border border-border bg-secondary text-secondary-foreground shadow-sm", className)}
+      className={cn(
+        "rounded-2xl border border-border bg-secondary text-secondary-foreground shadow-[var(--shadow-card)] transition-all duration-300",
+        hoverable && "hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]",
+        className,
+      )}
       {...props}
     />
   );

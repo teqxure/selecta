@@ -219,7 +219,7 @@ export async function duplicateProduct(sellerProfileId: string, productId: strin
 /** Shared shape for card grids: cover image + enough seller info to render a name. */
 const cardInclude = {
   images: { orderBy: { position: "asc" as const }, take: 1 },
-  seller: { select: { storeName: true, businessName: true } },
+  seller: { select: { storeName: true, businessName: true, ratingAverage: true } },
 } as const;
 
 type ProductRecord = Awaited<ReturnType<typeof db.product.findMany<{ include: typeof cardInclude }>>>[number];

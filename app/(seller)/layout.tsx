@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { LayoutGrid, Package, ShoppingCart, Wallet, Store } from "lucide-react";
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
 import { currentUser } from "@/lib/auth/current-user";
@@ -6,11 +7,11 @@ import { findSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { Role } from "@/lib/constants/roles";
 
 const SELLER_NAV = [
-  { label: "Dashboard", href: ROUTES.seller.dashboard },
-  { label: "Products", href: ROUTES.seller.products },
-  { label: "Orders", href: ROUTES.seller.orders },
-  { label: "Wallet", href: ROUTES.seller.wallet },
-  { label: "Store settings", href: ROUTES.seller.settings },
+  { label: "Dashboard", href: ROUTES.seller.dashboard, icon: LayoutGrid },
+  { label: "Products", href: ROUTES.seller.products, icon: Package },
+  { label: "Orders", href: ROUTES.seller.orders, icon: ShoppingCart },
+  { label: "Wallet", href: ROUTES.seller.wallet, icon: Wallet },
+  { label: "Store settings", href: ROUTES.seller.settings, icon: Store },
 ];
 
 export default async function SellerLayout({ children }: { children: ReactNode }) {

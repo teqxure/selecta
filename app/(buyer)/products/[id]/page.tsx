@@ -8,6 +8,7 @@ import { Badge, CONDITION_GRADE_TONE } from "@/components/ui/Badge";
 import { ProductSection } from "@/components/marketplace/ProductSection";
 import { ProductGrid } from "@/components/marketplace/ProductGrid";
 import { SaveButton } from "@/components/marketplace/SaveButton";
+import { SellerCard } from "@/components/marketplace/SellerCard";
 import { ImageGallery } from "./image-gallery";
 import { ContactSellerButton } from "./contact-seller-button";
 import { AddToCartButton } from "./add-to-cart-button";
@@ -40,18 +41,18 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const sellerName = product.seller.storeName ?? product.seller.businessName;
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
+    <div className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-10">
       {product.status !== "ACTIVE" && (
         <Badge tone="warning">Preview only — status: {product.status.replace("_", " ")}</Badge>
       )}
 
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
         <ImageGallery images={product.images} title={product.title} />
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <div>
             <div className="flex items-start justify-between gap-3">
-              <h1 className="text-2xl font-semibold text-foreground">{product.title}</h1>
+              <h1 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">{product.title}</h1>
               <SaveButton productId={product.id} initialSaved={saved} likeCount={product.likeCount} />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -61,7 +62,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-semibold text-accent">{format(Number(displayPrice))}</span>
+            <span className="font-display text-3xl font-semibold text-accent">{format(Number(displayPrice))}</span>
             {product.discountPrice != null && (
               <span className="text-base text-muted-foreground line-through">{format(Number(product.price))}</span>
             )}
@@ -75,17 +76,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             {product.color && <Badge tone="neutral">{product.color}</Badge>}
           </div>
 
-          {product.description && <p className="text-sm text-foreground">{product.description}</p>}
+          {product.description && <p className="text-sm leading-relaxed text-foreground">{product.description}</p>}
 
-          <div className="rounded-xl border border-border bg-secondary p-3 text-sm">
-            <p className="font-medium text-secondary-foreground">{sellerName}</p>
-            <p className="text-muted-foreground">
-              {product.city ? `${product.city}${product.state ? `, ${product.state}` : ""}` : "Location not set"}
-              {" · "}★ {product.seller.ratingAverage.toFixed(1)} ({product.seller.ratingCount})
-            </p>
-          </div>
+          <SellerCard
+            name={sellerName}
+            location={product.city ? `${product.city}${product.state ? `, ${product.state}` : ""}` : undefined}
+            ratingAverage={product.seller.ratingAverage}
+            ratingCount={product.seller.ratingCount}
+            isVerified={product.seller.verificationStatus === "VERIFIED"}
+          />
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 pt-1">
             <AddToCartButton productId={product.id} />
             <ContactSellerButton productId={product.id} isLoggedIn={Boolean(user)} />
             <ShareButton productId={product.id} title={product.title} />

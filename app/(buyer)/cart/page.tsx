@@ -1,10 +1,12 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
+import { ShoppingBag } from "lucide-react";
 import { currentUser } from "@/lib/auth/current-user";
 import { listCartItems } from "@/services/products/cart.service";
 import { ROUTES } from "@/lib/constants/routes";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { removeFromCartAction } from "@/app/(buyer)/actions";
 import { CheckoutButton } from "./checkout-button";
 
@@ -17,12 +19,15 @@ export default async function CartPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
-      <h1 className="text-2xl font-semibold text-foreground">Your cart</h1>
+      <h1 className="font-display text-2xl font-semibold text-foreground">Your cart</h1>
 
       {items.length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">Your cart is empty.</CardContent>
-        </Card>
+        <EmptyState
+          icon={ShoppingBag}
+          title="Your cart is feeling light."
+          description="Add a fit you love and it'll show up here, ready for checkout."
+          action={{ label: "Browse finds", href: ROUTES.search }}
+        />
       ) : (
         <>
           <div className="flex flex-col gap-3">

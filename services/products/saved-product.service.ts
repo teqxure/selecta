@@ -30,7 +30,7 @@ export function listSavedProducts(userId: string) {
       product: {
         include: {
           images: { orderBy: { position: "asc" }, take: 1 },
-          seller: { select: { storeName: true, businessName: true } },
+          seller: { select: { storeName: true, businessName: true, ratingAverage: true } },
         },
       },
     },

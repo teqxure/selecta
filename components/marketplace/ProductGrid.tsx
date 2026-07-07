@@ -1,4 +1,6 @@
 import { ProductCard } from "@/components/marketplace/ProductCard";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Search } from "lucide-react";
 
 export interface GridProduct {
   id: string;
@@ -10,18 +12,26 @@ export interface GridProduct {
   city: string | null;
   likeCount: number;
   images: { url: string }[];
-  seller: { storeName: string | null; businessName: string } | null;
+  seller: { storeName: string | null; businessName: string; ratingAverage: number } | null;
 }
 
 interface ProductGridProps {
   products: GridProduct[];
   savedIds?: Set<string>;
   canSave?: boolean;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
-export function ProductGrid({ products, savedIds, canSave = true }: ProductGridProps) {
+export function ProductGrid({
+  products,
+  savedIds,
+  canSave = true,
+  emptyTitle = "We haven't discovered that fit yet.",
+  emptyDescription = "Check back soon — new pieces land on Selecta every day.",
+}: ProductGridProps) {
   if (products.length === 0) {
-    return <p className="text-sm text-muted-foreground">Nothing here yet — check back soon.</p>;
+    return <EmptyState icon={Search} title={emptyTitle} description={emptyDescription} />;
   }
 
   return (
@@ -37,6 +47,7 @@ export function ProductGrid({ products, savedIds, canSave = true }: ProductGridP
           imageUrl={product.images[0]?.url}
           conditionGrade={product.conditionGrade}
           sellerName={product.seller?.storeName ?? product.seller?.businessName ?? "Selecta seller"}
+          sellerRating={product.seller?.ratingAverage}
           city={product.city}
           likeCount={product.likeCount}
           isSaved={savedIds?.has(product.id) ?? false}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export function ImageGallery({ images, title }: { images: { id: string; url: string }[]; title: string }) {
@@ -10,20 +11,31 @@ export function ImageGallery({ images, title }: { images: { id: string; url: str
   return (
     <div className="flex flex-col gap-2">
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-muted">
-        {images[activeIndex] && (
-          <Image src={images[activeIndex].url} alt={title} fill priority className="object-cover" />
-        )}
+        <AnimatePresence mode="wait">
+          {images[activeIndex] && (
+            <motion.div
+              key={images[activeIndex].id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="absolute inset-0"
+            >
+              <Image src={images[activeIndex].url} alt={title} fill priority className="object-cover" />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       {images.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto">
           {images.map((image, index) => (
             <button
               key={image.id}
               type="button"
               onClick={() => setActiveIndex(index)}
               className={cn(
-                "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2",
-                index === activeIndex ? "border-accent" : "border-transparent",
+                "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-colors",
+                index === activeIndex ? "border-accent" : "border-transparent opacity-70 hover:opacity-100",
               )}
             >
               <Image src={image.url} alt="" fill className="object-cover" />

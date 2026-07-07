@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { PackagePlus } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
@@ -7,6 +8,7 @@ import { listProductsBySeller, getProductStatusCounts } from "@/services/product
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ROUTES } from "@/lib/constants/routes";
 import { pauseProductAction, resumeProductAction, deleteProductAction, duplicateProductAction } from "./actions";
@@ -22,7 +24,7 @@ export default async function SellerProductsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-foreground">Products</h1>
+        <h1 className="font-display text-2xl font-semibold text-foreground">Products</h1>
         <Link href={ROUTES.seller.newProduct}>
           <Button variant="accent" size="sm">
             + New listing
@@ -39,11 +41,12 @@ export default async function SellerProductsPage() {
       </div>
 
       {products.length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            You haven&apos;t listed any products yet.
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={PackagePlus}
+          title="Your rail is empty."
+          description="List your first piece and start reaching Selecta buyers today."
+          action={{ label: "Create a listing", href: ROUTES.seller.newProduct }}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {products.map((product) => (

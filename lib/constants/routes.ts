@@ -9,10 +9,18 @@ export const ROUTES = {
   profile: "/profile",
   orders: "/orders",
   saved: "/saved",
+  cart: "/cart",
+  search: "/search",
+  product: (id: string) => `/products/${id}`,
   seller: {
     root: "/seller",
     dashboard: "/seller",
     products: "/seller/products",
+    newProduct: "/seller/products/new",
+    productImages: (id: string) => `/seller/products/${id}/images`,
+    productDetails: (id: string) => `/seller/products/${id}/details`,
+    productPricing: (id: string) => `/seller/products/${id}/pricing`,
+    productReview: (id: string) => `/seller/products/${id}/review`,
     orders: "/seller/orders",
     wallet: "/seller/wallet",
     settings: "/seller/settings",
@@ -27,6 +35,8 @@ export const ROUTES = {
     users: "/admin/users",
     sellers: "/admin/sellers",
     verificationQueue: "/admin/verification-queue",
+    categories: "/admin/categories",
+    products: "/admin/products",
   },
 } as const;
 
@@ -35,4 +45,4 @@ export const ROUTES = {
  * role. Checked in proxy.ts alongside the role-specific ROUTE_ROLE_ACCESS
  * table in lib/constants/roles.ts.
  */
-export const AUTH_REQUIRED_PREFIXES = ["/profile", "/orders", "/saved"] as const;
+export const AUTH_REQUIRED_PREFIXES = ["/profile", "/orders", "/saved", "/cart"] as const;

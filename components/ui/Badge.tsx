@@ -21,13 +21,30 @@ export function Badge({ className, tone, ...props }: BadgeProps) {
   return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
 }
 
-/** Maps the SellerVerificationStatus / UserStatus enum values to a badge tone. */
+/** Maps status-ish enum values (SellerVerificationStatus, UserStatus, ProductStatus) to a badge tone. */
 export const STATUS_TONE: Record<string, BadgeProps["tone"]> = {
   ACTIVE: "success",
   VERIFIED: "success",
   PENDING: "warning",
+  PENDING_REVIEW: "warning",
+  PAUSED: "neutral",
+  SOLD: "accent",
   INACTIVE: "neutral",
   REJECTED: "danger",
+  REMOVED: "danger",
   SUSPENDED: "danger",
   BANNED: "danger",
+};
+
+/** Maps ConditionGrade enum values to a badge tone for product cards. */
+export const CONDITION_GRADE_TONE: Record<string, BadgeProps["tone"]> = {
+  SELECTA_GOLD: "accent",
+  SELECTA_CLASSIC: "success",
+  SELECTA_VALUE: "neutral",
+};
+
+export const CONDITION_GRADE_SHORT_LABELS: Record<string, string> = {
+  SELECTA_GOLD: "Selecta Gold",
+  SELECTA_CLASSIC: "Selecta Classic",
+  SELECTA_VALUE: "Selecta Value",
 };

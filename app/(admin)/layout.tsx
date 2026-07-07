@@ -7,6 +7,8 @@ const ADMIN_NAV = [
   { label: "Users", href: ROUTES.admin.users },
   { label: "Sellers", href: ROUTES.admin.sellers },
   { label: "Verification queue", href: ROUTES.admin.verificationQueue },
+  { label: "Products", href: ROUTES.admin.products },
+  { label: "Categories", href: ROUTES.admin.categories },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

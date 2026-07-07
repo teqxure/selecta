@@ -49,9 +49,41 @@ enum SellerProductType {
 
 enum ProductStatus {
   DRAFT
+  PENDING_REVIEW
   ACTIVE
+  PAUSED
   SOLD
-  ARCHIVED
+  REJECTED
+  REMOVED
+}
+
+enum ConditionGrade {
+  SELECTA_GOLD
+  SELECTA_CLASSIC
+  SELECTA_VALUE
+}
+
+enum ProductGender {
+  MALE
+  FEMALE
+  UNISEX
+  KIDS
+}
+
+enum ProductImageKind {
+  FRONT
+  BACK
+  DETAIL
+  DEFECT
+  OTHER
+}
+
+enum ProductEventType {
+  VIEW
+  SAVE
+  UNSAVE
+  SHARE
+  CONTACT_SELLER
 }
 
 enum OrderStatus {
@@ -120,6 +152,9 @@ model User {
   activities      UserActivity[]
   loginHistory    LoginHistory[]
   assignedSellers SellerProfile[] @relation("SellerAgent")
+  savedProducts   SavedProduct[]
+  productEvents   ProductEvent[]
+  cartItems       CartItem[]
 
   @@index([role])
   @@index([status])
@@ -240,41 +275,131 @@ model Category {
   slug      String   @unique
   imageUrl  String?  @map("image_url")
   parentId  String?  @map("parent_id")
+  isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children Category[] @relation("CategoryHierarchy")
-  products Product[]
+  parent        Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children      Category[] @relation("CategoryHierarchy")
+  products      Product[]  @relation("ProductCategory")
+  subcategoryOf Product[]  @relation("ProductSubcategory")
 
   @@index([parentId])
   @@map("categories")
 }
 
 model Product {
-  id          String        @id @default(cuid())
-  sellerId    String        @map("seller_id")
-  categoryId  String        @map("category_id")
-  title       String
-  description String?
-  price       Decimal       @db.Decimal(10, 2)
-  currency    String        @default("NGN")
-  quantity    Int           @default(1)
-  images      String[]
-  status      ProductStatus @default(DRAFT)
-  viewCount   Int           @default(0) @map("view_count")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id              String         @id @default(cuid())
+  sellerId        String         @map("seller_id")
+  categoryId      String         @map("category_id")
+  subcategoryId   String?        @map("subcategory_id")
+  title           String
+  description     String?
+  brand           String?
+  color           String?
+  gender          ProductGender?
+  size            String?
+  price           Decimal        @db.Decimal(10, 2)
+  discountPrice   Decimal?       @map("discount_price") @db.Decimal(10, 2)
+  currency        String         @default("NGN")
+  quantity        Int            @default(1)
+  conditionGrade  ConditionGrade @default(SELECTA_CLASSIC) @map("condition_grade")
+  status          ProductStatus  @default(DRAFT)
+  city            String?
+  state           String?
+  viewCount       Int            @default(0) @map("view_count")
+  likeCount       Int            @default(0) @map("like_count")
+  shareCount      Int            @default(0) @map("share_count")
+  isFeatured      Boolean        @default(false) @map("is_featured")
+  rejectionReason String?        @map("rejection_reason")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
 
-  seller     SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  category   Category      @relation(fields: [categoryId], references: [id])
-  orderItems OrderItem[]
-  reviews    Review[]
+  seller      SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category    Category       @relation("ProductCategory", fields: [categoryId], references: [id])
+  subcategory Category?      @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  images      ProductImage[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+  savedBy     SavedProduct[]
+  events      ProductEvent[]
+  cartItems   CartItem[]
 
   @@index([sellerId])
   @@index([categoryId])
+  @@index([subcategoryId])
   @@index([status])
+  @@index([city, state])
+  @@index([isFeatured])
   @@map("products")
+}
+
+model ProductImage {
+  id            String           @id @default(cuid())
+  productId     String           @map("product_id")
+  url           String
+  kind          ProductImageKind @default(OTHER)
+  position      Int              @default(0)
+  // Hooks for a future AI pipeline (background removal / enhancement /
+  // auto quality scoring) — left null until that service exists.
+  processedUrl  String?          @map("processed_url")
+  qualityScore  Float?           @map("quality_score")
+  aiProcessedAt DateTime?        @map("ai_processed_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, position])
+  @@map("product_images")
+}
+
+/// Doubles as "like" (section 6/1) and "save" (section 9) — a single tap
+/// interaction in the UI, so one model rather than two near-duplicates.
+model SavedProduct {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@map("saved_products")
+}
+
+/// Raw event stream backing the denormalized Product counters and future
+/// recommendation/analytics work — counters stay fast to read, this stays
+/// the source of truth for aggregation.
+model ProductEvent {
+  id        String           @id @default(cuid())
+  productId String           @map("product_id")
+  userId    String?          @map("user_id")
+  type      ProductEventType
+  metadata  Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId, type, createdAt])
+  @@index([userId])
+  @@map("product_events")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
 }
 
 // ---------------------------------------------------------------------------

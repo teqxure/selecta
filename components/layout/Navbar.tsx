@@ -15,11 +15,20 @@ export async function Navbar() {
           {APP_NAME}
         </Link>
         <nav className="flex items-center gap-6 text-sm font-medium">
+          <Link href={ROUTES.search} className="text-foreground/80 hover:text-foreground">
+            Search
+          </Link>
           <Link href={ROUTES.seller.root} className="text-foreground/80 hover:text-foreground">
             Sell on {APP_NAME}
           </Link>
           {user ? (
             <>
+              <Link href={ROUTES.saved} className="text-foreground/80 hover:text-foreground">
+                Saved
+              </Link>
+              <Link href={ROUTES.cart} className="text-foreground/80 hover:text-foreground">
+                Cart
+              </Link>
               <Link href={ROUTES.orders} className="text-foreground/80 hover:text-foreground">
                 Orders
               </Link>

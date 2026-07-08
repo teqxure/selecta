@@ -6,8 +6,8 @@ import { usePathname } from "next/navigation";
 import { Menu, X, ArrowLeftCircle, ChevronUp, LogOut, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants/routes";
-import { APP_NAME } from "@/lib/constants/app";
 import { logoutAction } from "@/app/(auth)/actions";
+import { Logo } from "@/components/ui/Logo";
 
 export interface DashboardNavItem {
   label: string;
@@ -139,11 +139,8 @@ function SidebarFooter({ user, marketplaceUrl }: { user: DashboardSidebarProps["
 function SidebarLogo({ subtitle, marketplaceUrl }: { subtitle: string; marketplaceUrl: string }) {
   return (
     <div className="px-6 pb-4 pt-6">
-      <Link href={marketplaceUrl} className="font-display text-xl font-semibold tracking-tight text-secondary-foreground">
-        {APP_NAME}
-        <span className="text-accent">.</span>
-      </Link>
-      <p className="mt-0.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{subtitle}</p>
+      <Logo href={marketplaceUrl} />
+      <p className="mt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{subtitle}</p>
     </div>
   );
 }
@@ -165,10 +162,7 @@ export function DashboardSidebar({ subtitle, groups, user, marketplaceUrl }: Das
     <>
       {/* Mobile top bar */}
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-secondary px-4 py-3 md:hidden">
-        <Link href={marketplaceUrl} className="font-display text-lg font-semibold tracking-tight text-secondary-foreground">
-          {APP_NAME}
-          <span className="text-accent">.</span>
-        </Link>
+        <Logo href={marketplaceUrl} />
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
@@ -185,13 +179,7 @@ export function DashboardSidebar({ subtitle, groups, user, marketplaceUrl }: Das
           <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} aria-hidden />
           <div className="relative flex h-full w-72 max-w-[80vw] flex-col bg-secondary shadow-xl">
             <div className="flex items-center justify-between px-6 pt-6">
-              <Link
-                href={marketplaceUrl}
-                className="font-display text-xl font-semibold tracking-tight text-secondary-foreground"
-              >
-                {APP_NAME}
-                <span className="text-accent">.</span>
-              </Link>
+              <Logo href={marketplaceUrl} />
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}

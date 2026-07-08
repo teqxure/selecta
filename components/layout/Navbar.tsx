@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Search, ShoppingBag, LogOut, Bell } from "lucide-react";
 import { ROUTES } from "@/lib/constants/routes";
-import { APP_NAME } from "@/lib/constants/app";
 import { currentUser } from "@/lib/auth/current-user";
 import { logoutAction } from "@/app/(auth)/actions";
 import { getUnreadNotificationCount } from "@/services/notifications/notification.service";
 import { Button } from "@/components/ui/Button";
+import { Logo } from "@/components/ui/Logo";
 
 export async function Navbar() {
   const user = await currentUser();
@@ -14,10 +14,7 @@ export async function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-6">
-        <Link href={ROUTES.home} className="font-display shrink-0 text-xl font-semibold tracking-tight text-foreground">
-          {APP_NAME}
-          <span className="text-accent">.</span>
-        </Link>
+        <Logo className="shrink-0" />
 
         <form action={ROUTES.search} method="GET" className="hidden max-w-sm flex-1 md:block">
           <div className="flex h-10 items-center gap-2 rounded-full border border-border bg-muted/60 px-4 text-sm text-muted-foreground transition-colors focus-within:border-accent/50 focus-within:bg-background">

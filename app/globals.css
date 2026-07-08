@@ -1,35 +1,41 @@
 @import "tailwindcss";
 
 /*
- * Selecta brand palette — premium African fashion technology.
- * Midnight (primary) + warm cream (secondary) + burnt orange (accent).
+ * Selecta brand palette (official, 2026 refresh):
+ *   Primary Orange  #C96123   Dark Charcoal  #0B0B0E   Warm Cream  #F7E8D4
+ *   Olive Sage      #6F7D4F   Warm Grey      #DDD6CC   Orange Hover #A84F1B
+ *   Orange Tint     #F4D1B8   Background     #FAF8F4   Text Grey   #6B625B
  * Single source of truth: change values here, never hardcode hex in
- * components.
+ * components. `--color-burnt-orange*` names are kept (rather than renamed
+ * to "orange") so existing component references don't need to change —
+ * only the hex values underneath moved to the new brand.
  */
 :root {
-  --color-midnight: #0b0b0d;
-  --color-cream: #f5efe6;
-  --color-burnt-orange: #c45a1f;
-  --color-burnt-orange-bright: #e2762f;
+  --color-midnight: #0b0b0e;
+  --color-cream: #f7e8d4;
+  --color-burnt-orange: #c96123;
+  --color-burnt-orange-bright: #a84f1b;
+  --color-orange-tint: #f4d1b8;
+  --color-olive-sage: #6f7d4f;
   --color-gold: #cf9d4f;
 
-  --background: var(--color-cream);
+  --background: #faf8f4;
   --foreground: var(--color-midnight);
 
   --color-primary: var(--color-midnight);
-  --color-primary-foreground: var(--color-cream);
-  --color-secondary: var(--color-cream);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #ffffff;
   --color-secondary-foreground: var(--color-midnight);
   --color-accent: var(--color-burnt-orange);
-  --color-accent-foreground: var(--color-cream);
+  --color-accent-foreground: #ffffff;
 
-  --color-muted: #e7ded0;
-  --color-muted-foreground: #6b6459;
-  --color-border: #ddd3c2;
+  --color-muted: var(--color-orange-tint);
+  --color-muted-foreground: #6b625b;
+  --color-border: #ddd6cc;
 
-  --shadow-card: 0 1px 2px rgba(11, 11, 13, 0.04), 0 8px 24px -12px rgba(11, 11, 13, 0.12);
-  --shadow-card-hover: 0 4px 8px rgba(11, 11, 13, 0.06), 0 16px 40px -12px rgba(11, 11, 13, 0.2);
-  --shadow-float: 0 20px 60px -20px rgba(11, 11, 13, 0.35);
+  --shadow-card: 0 1px 2px rgba(11, 11, 14, 0.04), 0 8px 24px -12px rgba(11, 11, 14, 0.12);
+  --shadow-card-hover: 0 4px 8px rgba(11, 11, 14, 0.06), 0 16px 40px -12px rgba(11, 11, 14, 0.2);
+  --shadow-float: 0 20px 60px -20px rgba(11, 11, 14, 0.35);
 }
 
 @theme inline {
@@ -37,6 +43,8 @@
   --color-cream: var(--color-cream);
   --color-burnt-orange: var(--color-burnt-orange);
   --color-burnt-orange-bright: var(--color-burnt-orange-bright);
+  --color-orange-tint: var(--color-orange-tint);
+  --color-olive-sage: var(--color-olive-sage);
   --color-gold: var(--color-gold);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -64,12 +72,12 @@
 
     --color-primary: var(--color-cream);
     --color-primary-foreground: var(--color-midnight);
-    --color-secondary: #17171b;
+    --color-secondary: #18181b;
     --color-secondary-foreground: var(--color-cream);
 
-    --color-muted: #1c1c21;
-    --color-muted-foreground: #a3a099;
-    --color-border: #29292f;
+    --color-muted: #201e1a;
+    --color-muted-foreground: #b3aa9e;
+    --color-border: #2c2924;
 
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
     --shadow-card-hover: 0 4px 8px rgba(0, 0, 0, 0.35), 0 16px 40px -12px rgba(0, 0, 0, 0.6);

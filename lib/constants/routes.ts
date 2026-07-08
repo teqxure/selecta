@@ -44,6 +44,7 @@ export const ROUTES = {
   admin: {
     root: "/admin",
     users: "/admin/users",
+    user: (id: string) => `/admin/users/${id}`,
     sellers: "/admin/sellers",
     seller: (id: string) => `/admin/sellers/${id}`,
     verificationQueue: "/admin/verification-queue",

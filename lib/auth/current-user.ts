@@ -13,6 +13,20 @@ export const currentUser = cache(async () => {
   const session = await getSession();
   if (!session) return null;
 
+  // A `sessionId` (present on every session created after session tracking
+  // shipped) must point at a still-valid row — this is what makes "force
+  // logout" / "terminate this session" actually take effect on the very
+  // next request, not just at the JWT's natural expiry. Tokens issued
+  // before session tracking existed have no `sessionId` and are treated
+  // as unrevocable, same as before this check was added.
+  if (session.sessionId) {
+    const sessionRecord = await db.session.findUnique({
+      where: { id: session.sessionId },
+      select: { revokedAt: true },
+    });
+    if (!sessionRecord || sessionRecord.revokedAt) return null;
+  }
+
   const user = await db.user.findUnique({
     where: { id: session.userId },
     include: { sellerProfile: true },

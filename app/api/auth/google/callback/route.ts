@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyGoogleOAuthState, exchangeGoogleCode, verifyGoogleIdToken } from "@/lib/auth/google";
 import { findOrCreateGoogleUser, recordLoginHistory } from "@/services/users/user.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
-import { setSessionCookie } from "@/lib/auth/session";
+import { establishSession } from "@/services/users/session.service";
 import { getRequestMeta } from "@/lib/security/request-meta";
 import { ROUTES } from "@/lib/constants/routes";
 import { ROLE_HOME_ROUTE, Role, UserStatus } from "@/lib/constants/roles";
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   }
 
   await recordLoginHistory(user.id, true, { ipAddress, userAgent });
-  await setSessionCookie({ userId: user.id, role: user.role }, true);
+  await establishSession(user.id, user.role, { ipAddress, userAgent, rememberMe: true });
 
   let destination: string = ROLE_HOME_ROUTE[user.role];
   if (user.role === Role.SELLER) {

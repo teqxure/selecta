@@ -223,6 +223,7 @@ model User {
   addresses       Address[]
   activities      UserActivity[]
   loginHistory    LoginHistory[]
+  sessions        Session[]
   assignedSellers SellerProfile[] @relation("SellerAgent")
   savedProducts   SavedProduct[]
   productEvents   ProductEvent[]
@@ -376,6 +377,34 @@ model LoginHistory {
 
   @@index([userId, createdAt])
   @@map("login_history")
+}
+
+/// One row per issued session JWT — this is what makes "view active
+/// sessions" / "terminate this session" / "force logout everywhere"
+/// possible at all, since the JWT itself is a stateless bearer token that
+/// can't otherwise be revoked before its natural expiry. The JWT carries
+/// this row's id as its `sid` claim; `currentUser()` checks `revokedAt` on
+/// every request. `expiresAt` reflects the value at issuance only — the
+/// sliding-refresh in proxy.ts re-signs the JWT with a later `exp` without
+/// touching this row (proxy is deliberately DB-free), so treat `expiresAt`
+/// as informational and `revokedAt` as the sole authority on validity.
+/// Sessions created before this model existed have no matching row at all
+/// — `currentUser()` treats a JWT with no `sid` claim as unrevocable
+/// (pre-existing behavior), so already-logged-in users aren't force-logged-out
+/// by this migration; they age out naturally within their existing expiry.
+model Session {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("sessions")
 }
 
 // ---------------------------------------------------------------------------

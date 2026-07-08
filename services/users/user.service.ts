@@ -9,6 +9,7 @@ import { PAGINATION } from "@/lib/constants/app";
 import type { RegisterInput } from "@/lib/validators/auth";
 import type { UpdateBuyerProfileInput } from "@/lib/validators/profile";
 import type { GoogleProfile, GoogleRole } from "@/lib/auth/google";
+import type { Prisma } from "@/generated/prisma/client";
 import type { PaginatedResult } from "@/types";
 
 export async function createUser(input: RegisterInput) {
@@ -133,16 +134,6 @@ export async function updateBuyerProfile(userId: string, input: UpdateBuyerProfi
   });
 }
 
-export async function updateUserStatus(userId: string, status: UserStatus, actorId: string) {
-  return db.$transaction(async (tx) => {
-    const user = await tx.user.update({ where: { id: userId }, data: { status } });
-    await tx.auditLog.create({
-      data: { actorId, action: "USER_STATUS_CHANGED", entityType: "User", entityId: userId, metadata: { status } },
-    });
-    return user;
-  });
-}
-
 /**
  * Full role reassignment — Super Admin's "give this account any role,
  * including Super Admin itself" lever. Deliberately separate from (and far
@@ -258,14 +249,55 @@ export function recordUserActivity(userId: string, action: string, metadata?: Re
 
 type UserRecord = Awaited<ReturnType<typeof db.user.findMany>>[number];
 
-export async function listUsers(page = 1, pageSize = PAGINATION.defaultPageSize): Promise<PaginatedResult<UserRecord>> {
-  const [items, totalCount] = await Promise.all([
-    db.user.findMany({
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+export interface ListUsersFilters {
+  /** Matches first name, last name, email (all case-insensitive, partial), or an exact user id. */
+  search?: string;
+  role?: Role;
+  status?: UserStatus;
+  verified?: "verified" | "unverified";
+  joinedAfter?: Date;
+  joinedBefore?: Date;
+  /** "most_active" ranks by total login attempts recorded (success + failed) — the only per-user
+   *  activity volume this schema tracks today; see Phase 1 audit note in activity-timeline.service.ts. */
+  sort?: "newest" | "oldest" | "most_active";
+}
+
+export async function listUsers(
+  page = 1,
+  pageSize = PAGINATION.defaultPageSize,
+  filters: ListUsersFilters = {},
+): Promise<PaginatedResult<UserRecord>> {
+  const where: Prisma.UserWhereInput = {
+    ...(filters.role && { role: filters.role }),
+    ...(filters.status && { status: filters.status }),
+    ...(filters.verified === "verified" && { emailVerifiedAt: { not: null } }),
+    ...(filters.verified === "unverified" && { emailVerifiedAt: null }),
+    ...((filters.joinedAfter || filters.joinedBefore) && {
+      createdAt: {
+        ...(filters.joinedAfter && { gte: filters.joinedAfter }),
+        ...(filters.joinedBefore && { lte: filters.joinedBefore }),
+      },
     }),
-    db.user.count(),
+    ...(filters.search && {
+      OR: [
+        { firstName: { contains: filters.search, mode: "insensitive" } },
+        { lastName: { contains: filters.search, mode: "insensitive" } },
+        { email: { contains: filters.search, mode: "insensitive" } },
+        { id: filters.search },
+      ],
+    }),
+  };
+
+  const orderBy: Prisma.UserOrderByWithRelationInput =
+    filters.sort === "oldest"
+      ? { createdAt: "asc" }
+      : filters.sort === "most_active"
+        ? { loginHistory: { _count: "desc" } }
+        : { createdAt: "desc" };
+
+  const [items, totalCount] = await Promise.all([
+    db.user.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.user.count({ where }),
   ]);
 
   return { items, page, pageSize, totalCount, totalPages: Math.ceil(totalCount / pageSize) };

@@ -51,7 +51,7 @@ export async function proxy(request: NextRequest) {
   if (remainingSeconds < SESSION_REFRESH_THRESHOLD_SECONDS) {
     const originalDuration = session.expiresAt - session.issuedAt;
     const refreshedToken = await createSessionToken(
-      { userId: session.userId, role: session.role },
+      { userId: session.userId, role: session.role, sessionId: session.sessionId },
       originalDuration,
     );
     response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, {

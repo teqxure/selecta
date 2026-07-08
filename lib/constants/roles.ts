@@ -13,9 +13,10 @@ export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin",
 };
 
+/** "INACTIVE" is the DB enum value; shown to admins as "Deactivated" — the lifecycle state a Super Admin sets deliberately, distinct from a user simply going quiet. */
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   ACTIVE: "Active",
-  INACTIVE: "Inactive",
+  INACTIVE: "Deactivated",
   SUSPENDED: "Suspended",
   BANNED: "Banned",
 };

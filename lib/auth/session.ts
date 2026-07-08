@@ -10,6 +10,14 @@ const secretKey = new TextEncoder().encode(env.SESSION_SECRET);
 export interface SessionPayload {
   userId: string;
   role: Role;
+  /**
+   * The DB `Session` row id ("sid" claim) — present on every session
+   * created after session tracking was introduced. Absent on tokens
+   * issued before that (pre-existing logged-in users): those are treated
+   * as unrevocable and simply age out at their existing expiry, so
+   * shipping this feature doesn't force-log-out anyone already signed in.
+   */
+  sessionId?: string;
 }
 
 /** Full decoded token, including timing, for sliding-expiration decisions in proxy.ts. */
@@ -29,7 +37,7 @@ export async function createSessionToken(payload: SessionPayload, maxAgeSeconds 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   const detailed = await verifySessionTokenDetailed(token);
   if (!detailed) return null;
-  return { userId: detailed.userId, role: detailed.role };
+  return { userId: detailed.userId, role: detailed.role, sessionId: detailed.sessionId };
 }
 
 /** Used by proxy.ts to decide whether a session needs sliding-expiration refresh. */
@@ -38,7 +46,8 @@ export async function verifySessionTokenDetailed(token: string): Promise<Session
     const { payload } = await jwtVerify(token, secretKey);
     if (typeof payload.userId !== "string" || typeof payload.role !== "string") return null;
     if (typeof payload.iat !== "number" || typeof payload.exp !== "number") return null;
-    return { userId: payload.userId, role: payload.role as Role, issuedAt: payload.iat, expiresAt: payload.exp };
+    const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : undefined;
+    return { userId: payload.userId, role: payload.role as Role, sessionId, issuedAt: payload.iat, expiresAt: payload.exp };
   } catch {
     return null;
   }

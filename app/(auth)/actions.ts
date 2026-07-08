@@ -5,8 +5,9 @@ import { z } from "zod";
 import { loginSchema, registerSchema } from "@/lib/validators/auth";
 import { createUser, getUserByEmail, recordLoginHistory } from "@/services/users/user.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
+import { establishSession, revokeSession } from "@/services/users/session.service";
 import { verifyPassword, DUMMY_PASSWORD_HASH } from "@/lib/auth/password";
-import { setSessionCookie, clearSessionCookie } from "@/lib/auth/session";
+import { getSession, clearSessionCookie } from "@/lib/auth/session";
 import { isAppError } from "@/lib/errors";
 import { checkLoginRateLimit } from "@/lib/security/rate-limit";
 import { getRequestMeta } from "@/lib/security/request-meta";
@@ -23,7 +24,7 @@ export async function registerAction(_prevState: AuthActionState, formData: Form
     return { error: z.prettifyError(parsed.error) };
   }
 
-  const { ipAddress } = await getRequestMeta();
+  const { ipAddress, userAgent } = await getRequestMeta();
   const rateLimit = checkLoginRateLimit(`register:${ipAddress ?? "unknown"}`);
   if (!rateLimit.allowed) {
     return { error: "Too many attempts. Please try again in a few minutes." };
@@ -34,7 +35,7 @@ export async function registerAction(_prevState: AuthActionState, formData: Form
   try {
     const user = await createUser(parsed.data);
     role = user.role;
-    await setSessionCookie({ userId: user.id, role: user.role });
+    await establishSession(user.id, user.role, { ipAddress, userAgent });
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;
@@ -77,7 +78,7 @@ export async function loginAction(_prevState: AuthActionState, formData: FormDat
   if (user.status !== UserStatus.ACTIVE) {
     await recordLoginHistory(user.id, false, { reason: `ACCOUNT_${user.status}`, ipAddress, userAgent });
     const messages: Record<string, string> = {
-      INACTIVE: "Your account is inactive. Please contact support to reactivate it.",
+      INACTIVE: "Your account has been deactivated. Please contact support to reactivate it.",
       SUSPENDED: "Your account has been suspended. Please contact support.",
       BANNED: "Your account has been banned.",
     };
@@ -85,7 +86,7 @@ export async function loginAction(_prevState: AuthActionState, formData: FormDat
   }
 
   await recordLoginHistory(user.id, true, { ipAddress, userAgent });
-  await setSessionCookie({ userId: user.id, role: user.role }, rememberMe);
+  await establishSession(user.id, user.role, { ipAddress, userAgent, rememberMe });
 
   let destination: string = ROLE_HOME_ROUTE[user.role];
   if (user.role === Role.SELLER) {
@@ -97,6 +98,10 @@ export async function loginAction(_prevState: AuthActionState, formData: FormDat
 }
 
 export async function logoutAction() {
+  const session = await getSession();
+  if (session?.sessionId) {
+    await revokeSession(session.userId, session.userId, session.sessionId);
+  }
   await clearSessionCookie();
   redirect(ROUTES.login);
 }

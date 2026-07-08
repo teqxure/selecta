@@ -61,11 +61,15 @@ export function ProductCard({
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-midnight/35 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         </Link>
 
-        <Badge tone={CONDITION_GRADE_TONE[conditionGrade]} className="pointer-events-none absolute left-2 top-2 shadow-sm">
+        <Badge
+          tone={CONDITION_GRADE_TONE[conditionGrade]}
+          solid
+          className="pointer-events-none absolute left-2 top-2 shadow-sm"
+        >
           {CONDITION_GRADE_SHORT_LABELS[conditionGrade] ?? conditionGrade}
         </Badge>
         {hasDiscount && (
-          <Badge tone="danger" className="pointer-events-none absolute left-2 top-9 shadow-sm">
+          <Badge tone="danger" solid className="pointer-events-none absolute left-2 top-9 shadow-sm">
             Sale
           </Badge>
         )}

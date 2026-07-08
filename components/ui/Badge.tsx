@@ -11,14 +11,32 @@ const badgeVariants = cva("inline-flex items-center gap-1 rounded-full px-2.5 py
       danger: "bg-red-100 text-red-800",
       accent: "bg-accent/15 text-accent",
     },
+    /**
+     * Tinted tones (translucent color over the tone hue) read fine sitting
+     * on a solid card/table background, but they nearly disappear floating
+     * directly over a photo — e.g. the condition-grade badge on a product
+     * card, over a light-colored garment. `solid` swaps in a fully opaque
+     * fill so the badge stays legible over any image.
+     */
+    solid: {
+      true: "",
+      false: "",
+    },
   },
-  defaultVariants: { tone: "neutral" },
+  compoundVariants: [
+    { tone: "neutral", solid: true, className: "bg-foreground/85 text-background" },
+    { tone: "success", solid: true, className: "bg-[color:var(--color-olive-sage)] text-white" },
+    { tone: "warning", solid: true, className: "bg-amber-500 text-white" },
+    { tone: "danger", solid: true, className: "bg-red-600 text-white" },
+    { tone: "accent", solid: true, className: "bg-accent text-accent-foreground" },
+  ],
+  defaultVariants: { tone: "neutral", solid: false },
 });
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
-export function Badge({ className, tone, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
+export function Badge({ className, tone, solid, ...props }: BadgeProps) {
+  return <span className={cn(badgeVariants({ tone, solid }), className)} {...props} />;
 }
 
 /** Maps status-ish enum values (SellerVerificationStatus, UserStatus, ProductStatus) to a badge tone. */

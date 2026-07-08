@@ -10,14 +10,20 @@ interface LogoProps {
 }
 
 /**
- * The Selecta wordmark (public/Selecta.png) is white-on-transparent, so it
- * always sits on its own dark-charcoal chip — that's what makes it drop
- * onto any background in the app (light navbar, dark sidebar, footer,
- * auth pages) without needing a second logo asset for light surfaces.
+ * The Selecta wordmark (public/Selecta.png) is white-on-transparent, so on
+ * a light background it needs a dark-charcoal chip behind it — the
+ * approved brand treatment (see the "black background" mockup in
+ * public/) for a dark backdrop. In dark mode the page/sidebar background
+ * is already dark, so the chip is dropped rather than stacking two
+ * near-identical dark tones (midnight-on-near-midnight had almost no
+ * contrast, which read as "broken" rather than as a deliberate chip).
  */
 export function Logo({ href = ROUTES.home, className, imageClassName }: LogoProps) {
   return (
-    <Link href={href} className={cn("inline-flex items-center rounded-lg bg-midnight px-3 py-1.5", className)}>
+    <Link
+      href={href}
+      className={cn("inline-flex items-center rounded-lg bg-midnight px-3 py-1.5 dark:bg-transparent dark:px-0 dark:py-0", className)}
+    >
       <Image
         src="/Selecta.png"
         alt="Selecta"

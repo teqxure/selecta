@@ -11,8 +11,11 @@ function matchPrefix(pathname: string, prefixes: readonly string[]) {
   return prefixes.find((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-/** Still served as-is even on the admin subdomain — the login/register forms, which aren't under `/admin`. (API routes and Next's own assets never reach here — see `config.matcher` below.) */
+/** Still served as-is even on the admin subdomain — the login/register forms, which aren't under `/admin`. (API routes and Next's own build assets never reach here — see `config.matcher` below.) */
 const ADMIN_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register"];
+
+/** A request for an actual file — `/Selecta.png`, `/icon.png`, `/robots.txt` — never a page route, so it must never get an `/admin` prefix stuck on it. */
+const FILE_EXTENSION_PATTERN = /\.[a-zA-Z0-9]+$/;
 
 /**
  * `NEXT_PUBLIC_ADMIN_HOST` (e.g. "admin.selectapick.store") is a cosmetic
@@ -20,7 +23,11 @@ const ADMIN_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register"];
  * separate app. A bare path on that host (`/users`) is rewritten to
  * `/admin/users` invisibly; a path that already starts with `/admin`
  * (e.g. from an existing `<Link href="/admin/...">`) is left alone, since
- * it's already pointing at the right place.
+ * it's already pointing at the right place. Static files under `/public`
+ * (images, icons, etc.) are served as-is too — prefixing them with
+ * `/admin` made them look like an auth-gated admin page, breaking every
+ * image referenced by an absolute path (including the dashboard's own
+ * logo) on this host.
  */
 function rewriteForAdminHost(request: NextRequest): string {
   const pathname = request.nextUrl.pathname;
@@ -31,6 +38,7 @@ function rewriteForAdminHost(request: NextRequest): string {
   if (!isAdminHost) return pathname;
   if (pathname.startsWith("/admin")) return pathname;
   if (matchPrefix(pathname, ADMIN_HOST_PASSTHROUGH_PREFIXES)) return pathname;
+  if (FILE_EXTENSION_PATTERN.test(pathname)) return pathname;
 
   return pathname === "/" ? "/admin" : `/admin${pathname}`;
 }

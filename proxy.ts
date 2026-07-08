@@ -36,12 +36,39 @@ function rewriteForAdminHost(request: NextRequest): string {
 }
 
 /**
+ * Once the admin subdomain is configured, `/admin` on the main domain is
+ * no longer a valid way in — this redirects it to the equivalent path on
+ * the subdomain instead, regardless of auth state, so there's exactly one
+ * front door to the admin console. Runs before any auth check on purpose:
+ * an already-logged-in admin visiting the old bookmarked path should be
+ * bounced to the subdomain too, not silently keep working there.
+ */
+function redirectAwayFromMainDomainAdminPath(request: NextRequest): URL | null {
+  if (!env.NEXT_PUBLIC_ADMIN_HOST) return null;
+
+  const host = request.headers.get("host") ?? "";
+  const isAdminHost = host === env.NEXT_PUBLIC_ADMIN_HOST || host.startsWith(`${env.NEXT_PUBLIC_ADMIN_HOST}:`);
+  if (isAdminHost) return null;
+
+  const pathname = request.nextUrl.pathname;
+  if (pathname !== "/admin" && !pathname.startsWith("/admin/")) return null;
+
+  const rest = pathname.slice("/admin".length); // "" or "/users" etc.
+  const target = new URL(`https://${env.NEXT_PUBLIC_ADMIN_HOST}${rest || "/"}`);
+  target.search = request.nextUrl.search;
+  return target;
+}
+
+/**
  * Optimistic, cookie-only auth check. Proxy runs before every matched
  * request and must stay fast — no database calls here (see Next.js Proxy
  * guide). The real authorization check happens again in the Server
  * Action/Route Handler via `requireRole`/`requireAuth` in lib/auth/rbac.ts.
  */
 export async function proxy(request: NextRequest) {
+  const adminPathRedirect = redirectAwayFromMainDomainAdminPath(request);
+  if (adminPathRedirect) return NextResponse.redirect(adminPathRedirect, 308);
+
   const rewrittenPathname = rewriteForAdminHost(request);
   const isRewritten = rewrittenPathname !== request.nextUrl.pathname;
 

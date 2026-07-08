@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { createNotification } from "@/services/notifications/notification.service";
+import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { Role, UserStatus } from "@/lib/constants/roles";
 import { sanitizeOptionalText } from "@/lib/security/sanitize";
 import { PAGINATION } from "@/lib/constants/app";
@@ -140,6 +141,99 @@ export async function updateUserStatus(userId: string, status: UserStatus, actor
     });
     return user;
   });
+}
+
+/**
+ * Full role reassignment — Super Admin's "give this account any role,
+ * including Super Admin itself" lever. Deliberately separate from (and far
+ * less guarded than) admin-management.service.ts, which only ever touches
+ * ADMIN accounts; this function is the one place in the codebase allowed
+ * to promote into, or demote out of, SUPER_ADMIN. Two hard rules keep that
+ * power from being a footgun: an actor can never change their own role
+ * (no accidental or malicious self-lockout/self-escalation from this
+ * surface), and the last active Super Admin can never be demoted (the
+ * platform can't be left without one).
+ */
+export async function changeUserRole(actorId: string, targetUserId: string, newRole: Role, ipAddress?: string) {
+  if (actorId === targetUserId) throw new ForbiddenError("You cannot change your own role");
+
+  const target = await db.user.findUnique({ where: { id: targetUserId } });
+  if (!target) throw new NotFoundError("User");
+  if (target.role === newRole) return target;
+
+  if (target.role === Role.SUPER_ADMIN) {
+    const remainingSuperAdmins = await db.user.count({
+      where: { role: Role.SUPER_ADMIN, status: UserStatus.ACTIVE, id: { not: targetUserId } },
+    });
+    if (remainingSuperAdmins === 0) {
+      throw new ForbiddenError("At least one active Super Admin must remain — promote another account first");
+    }
+  }
+
+  const previousRole = target.role;
+
+  const updated = await db.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: targetUserId },
+      // Permissions are meaningless (and dangerous to leave stale) outside
+      // ADMIN — reset on every real role change; Super Admin grants fresh
+      // ADMIN permissions afterward via /admin/admins if newRole is ADMIN.
+      data: { role: newRole, permissions: [] },
+    });
+
+    if (newRole === Role.SELLER) {
+      const existingSellerProfile = await tx.sellerProfile.findUnique({ where: { userId: user.id } });
+      if (!existingSellerProfile) {
+        await tx.sellerProfile.create({
+          data: { userId: user.id, businessName: `${user.firstName} ${user.lastName}`, onboardingStep: 1 },
+        });
+      }
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        action: "USER_ROLE_CHANGED",
+        entityType: "User",
+        entityId: targetUserId,
+        metadata: { fromRole: previousRole, toRole: newRole },
+        ipAddress,
+      },
+    });
+
+    return user;
+  });
+
+  await createNotification(
+    updated.id,
+    "SYSTEM",
+    "Your account role changed",
+    `Your Selecta account role changed from ${previousRole} to ${newRole}.`,
+    { fromRole: previousRole, toRole: newRole },
+  );
+
+  // A Super-Admin-tier transition (either direction) is the highest-stakes
+  // change this function can make — surface it to every other active
+  // Super Admin too, so it can never happen unnoticed even by them.
+  if (previousRole === Role.SUPER_ADMIN || newRole === Role.SUPER_ADMIN) {
+    const otherSuperAdmins = await db.user.findMany({
+      where: { role: Role.SUPER_ADMIN, status: UserStatus.ACTIVE, id: { notIn: [actorId, targetUserId] } },
+      select: { id: true },
+    });
+    await Promise.all(
+      otherSuperAdmins.map((admin) =>
+        createNotification(
+          admin.id,
+          "SYSTEM",
+          "Super Admin role change",
+          `${updated.firstName} ${updated.lastName} (${updated.email}) changed from ${previousRole} to ${newRole}.`,
+          { targetUserId, fromRole: previousRole, toRole: newRole, actorId },
+        ),
+      ),
+    );
+  }
+
+  return updated;
 }
 
 export function recordLoginHistory(

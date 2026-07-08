@@ -54,7 +54,10 @@ export async function initiateCheckoutForOrder(orderId: string, buyerEmail: stri
  * own verify API (never trusts the redirect query string), so it's just
  * as trustworthy as the webhook path, just pull- instead of push-driven.
  */
-export async function verifyAndSyncPayment(orderId: string) {
+export async function verifyAndSyncPayment(orderId: string, buyerId: string) {
+  const order = await db.order.findUnique({ where: { id: orderId }, select: { buyerId: true } });
+  if (!order || order.buyerId !== buyerId) return;
+
   const payment = await db.payment.findUnique({ where: { orderId } });
   if (!payment || payment.status !== "PENDING") return;
 

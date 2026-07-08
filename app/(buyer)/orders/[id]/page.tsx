@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth/rbac";
 import { getOrderDetailForBuyer } from "@/services/orders/order.service";
 import { verifyAndSyncPayment } from "@/services/payments/checkout.service";
+import { listReviewableItemsForOrder } from "@/services/products/review.service";
 import { isAppError } from "@/lib/errors";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
 import { confirmDeliveryAction } from "./actions";
 import { DisputeForm } from "./dispute-form";
+import { ReviewForm } from "./review-form";
 
 const DISPUTABLE_STATUSES = new Set(["PAID", "PROCESSING", "READY_FOR_PICKUP", "IN_TRANSIT", "DELIVERED", "COMPLETED"]);
 
@@ -17,12 +19,10 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
   const session = await requireAuth();
   const { id } = await params;
 
-  try {
-    await verifyAndSyncPayment(id);
-  } catch {
-    // Best-effort — the webhook will still catch up if the provider call fails here.
-  }
-
+  // Ownership must be confirmed before anything else touches this order —
+  // verifyAndSyncPayment has a real side effect (it can call the payment
+  // provider and confirm/fail a payment), and it must never run against an
+  // order id the caller doesn't actually own, however that id was reached.
   let order;
   try {
     order = await getOrderDetailForBuyer(id, session.userId);
@@ -30,6 +30,14 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
     if (isAppError(error)) notFound();
     throw error;
   }
+
+  try {
+    await verifyAndSyncPayment(id, session.userId);
+  } catch {
+    // Best-effort — the webhook will still catch up if the provider call fails here.
+  }
+
+  const reviewableItems = order.status === "COMPLETED" ? await listReviewableItemsForOrder(id, session.userId) : [];
 
   const format = (value: number, currency: string) => new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(value);
 
@@ -95,7 +103,21 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
         </CardContent>
       </Card>
 
-      {order.delivery && (order.delivery.pickupLocation || order.delivery.events.length > 0) && (
+      {reviewableItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Leave a review</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {reviewableItems.map((item) => (
+              <ReviewForm key={item.id} orderId={order.id} orderItemId={item.id} productTitle={item.product.title} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {order.delivery &&
+        (order.delivery.pickupLocation || order.delivery.trackingCode || order.delivery.events.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle>Delivery</CardTitle>
@@ -103,6 +125,17 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
           <CardContent className="flex flex-col gap-2">
             {order.delivery.pickupLocation && (
               <p className="text-sm text-muted-foreground">Pickup location: {order.delivery.pickupLocation}</p>
+            )}
+            {order.delivery.courier && (
+              <p className="text-sm text-muted-foreground">Courier: {order.delivery.courier}</p>
+            )}
+            {order.delivery.trackingCode && (
+              <p className="text-sm text-muted-foreground">Tracking code: {order.delivery.trackingCode}</p>
+            )}
+            {order.delivery.estimatedAt && (
+              <p className="text-sm text-muted-foreground">
+                Estimated delivery: {order.delivery.estimatedAt.toLocaleDateString("en-NG", { dateStyle: "medium" })}
+              </p>
             )}
             {order.delivery.events.map((event) => (
               <p key={event.id} className="text-sm text-muted-foreground">

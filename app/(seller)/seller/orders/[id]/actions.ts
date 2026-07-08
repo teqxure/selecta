@@ -22,11 +22,15 @@ export async function setDeliveryDetailsAction(formData: FormData) {
   const session = await requireRole(Role.SELLER);
   const orderId = String(formData.get("orderId"));
   const deliveryFee = String(formData.get("deliveryFee") || "");
+  const estimatedAt = String(formData.get("estimatedAt") || "");
 
   await setDeliveryDetails(orderId, session.userId, {
     method: String(formData.get("method")) as DeliveryMethod,
     pickupLocation: String(formData.get("pickupLocation") || "") || null,
     deliveryFee: deliveryFee ? Number(deliveryFee) : null,
+    courier: String(formData.get("courier") || "") || null,
+    trackingCode: String(formData.get("trackingCode") || "") || null,
+    estimatedAt: estimatedAt ? new Date(estimatedAt) : null,
   });
   revalidatePath(ROUTES.seller.order(orderId));
 }

@@ -97,6 +97,10 @@ enum OrderStatus {
   COMPLETED
   DISPUTED
   CANCELLED
+  /// Terminal — reached only via dispute resolution siding with the
+  /// buyer. Distinct from CANCELLED (never fulfilled) since a refunded
+  /// order was paid for and may have shipped; the money simply came back.
+  REFUNDED
 }
 
 enum PaymentStatus {
@@ -231,6 +235,8 @@ model User {
   integrationSettingsSet IntegrationSetting[]
   commissionRulesCreated CommissionRule[]
   featureFlagsUpdated    FeatureFlag[]
+  ledgerEntries          LedgerEntry[]
+  ledgerEntriesRecorded  LedgerEntry[]        @relation("LedgerEntryActor")
 
   @@index([role])
   @@index([status])
@@ -271,6 +277,7 @@ model SellerProfile {
   transactions  Transaction[]
   withdrawals   Withdrawal[]
   disputes      Dispute[]
+  ledgerEntries LedgerEntry[]
 
   @@index([verificationStatus])
   @@index([agentId])
@@ -529,6 +536,7 @@ model Order {
   transactions  Transaction[]
   statusHistory OrderStatusHistory[]
   disputes      Dispute[]
+  ledgerEntries LedgerEntry[]
 
   @@index([buyerId])
   @@index([status])
@@ -563,6 +571,7 @@ model OrderItem {
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
+  review  Review?
 
   @@index([orderId])
   @@index([productId])
@@ -661,17 +670,81 @@ model Withdrawal {
   @@map("withdrawals")
 }
 
-model Review {
-  id        String   @id @default(cuid())
-  productId String   @map("product_id")
-  authorId  String   @map("author_id")
-  rating    Int
-  comment   String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+/// Every type of money movement the platform ever records. Amounts are
+/// signed from the perspective of the entity they credit/debit: positive
+/// increases what's owed to that entity, negative decreases it. See
+/// services/finance/ledger.service.ts for the exact convention used by
+/// each type.
+enum LedgerEntryType {
+  CUSTOMER_PAYMENT
+  COMMISSION_EARNED
+  VENDOR_CREDIT
+  WITHDRAWAL_REQUEST
+  WITHDRAWAL_PAID
+  REFUND
+  ADJUSTMENT
+}
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  author  User    @relation(fields: [authorId], references: [id])
+/// Append-only financial journal — the authoritative source for every
+/// historical revenue/payout figure (GMV, commission earned, completed
+/// payouts, refunds). Nothing here is ever updated or deleted; a
+/// correction is made by writing a new offsetting entry (typically
+/// ADJUSTMENT), never by editing a prior row. Wallet/Transaction/
+/// Withdrawal status columns remain the fast, mutable "current state" —
+/// this table is the immutable "what actually happened, in order" record
+/// that state is derived from.
+model LedgerEntry {
+  id            String          @id @default(cuid())
+  type          LedgerEntryType
+  amount        Decimal         @db.Decimal(10, 2)
+  currency      String          @default("NGN")
+  /// Free-form correlation id for grouping entries from the same economic
+  /// event (e.g. a provider's payment reference) — not a foreign key.
+  reference     String?
+  userId        String?         @map("user_id")
+  sellerId      String?         @map("seller_id")
+  orderId       String?         @map("order_id")
+  paymentId     String?         @map("payment_id")
+  transactionId String?         @map("transaction_id")
+  withdrawalId  String?         @map("withdrawal_id")
+  /// Who/what caused this entry — null for system-driven entries (webhook
+  /// confirmations, escrow release), set for admin-initiated ones (manual
+  /// adjustment, withdrawal approval).
+  actorId       String?         @map("actor_id")
+  note          String?
+  metadata      Json?
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  user   User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  seller SellerProfile? @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  order  Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  actor  User?          @relation("LedgerEntryActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([userId])
+  @@index([sellerId])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("ledger_entries")
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  productId   String   @map("product_id")
+  authorId    String   @map("author_id")
+  /// The specific purchase this review is for — unique, so "one review per
+  /// purchased item" is a database guarantee, not just an application
+  /// check. Also what proves the reviewer actually bought this (a
+  /// "verified purchase" review), not just anyone with an account.
+  orderItemId String   @unique @map("order_item_id")
+  rating      Int
+  comment     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@map("reviews")
@@ -690,6 +763,10 @@ model Delivery {
   address        Json
   pickupLocation String?        @map("pickup_location")
   deliveryFee    Decimal?       @map("delivery_fee") @db.Decimal(10, 2)
+  /// Courier/logistics partner name — free text today (e.g. "GIG Logistics"),
+  /// the natural place to switch to a partner-id FK once real logistics
+  /// integrations exist.
+  courier        String?
   trackingCode   String?        @unique @map("tracking_code")
   estimatedAt    DateTime?      @map("estimated_at")
   deliveredAt    DateTime?      @map("delivered_at")

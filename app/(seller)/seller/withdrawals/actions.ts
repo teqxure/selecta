@@ -20,7 +20,7 @@ export async function requestWithdrawalAction(
   const profile = await getSellerProfileByUserId(session.userId);
 
   try {
-    await requestWithdrawal(profile.id, {
+    await requestWithdrawal(session.userId, profile.id, {
       amount: Number(formData.get("amount")),
       bankName: String(formData.get("bankName") || "").trim(),
       accountNumber: String(formData.get("accountNumber") || "").trim(),

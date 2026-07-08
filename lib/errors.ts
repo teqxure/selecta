@@ -47,6 +47,12 @@ export class ConflictError extends AppError {
   }
 }
 
+export class RateLimitError extends AppError {
+  constructor(message = "Too many attempts — please slow down and try again shortly") {
+    super(message, 429, "RATE_LIMITED");
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }

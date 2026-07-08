@@ -10,16 +10,13 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
 import { advanceOrderStatusAction, setDeliveryDetailsAction } from "./actions";
-import type { OrderStatus } from "@/generated/prisma/enums";
+import { getAllowedNextStatuses } from "@/services/orders/order-state-machine";
 
-const NEXT_STATUS_OPTIONS: Partial<Record<OrderStatus, { status: OrderStatus; label: string }[]>> = {
-  PAID: [{ status: "PROCESSING", label: "Start processing" }],
-  PROCESSING: [
-    { status: "READY_FOR_PICKUP", label: "Mark ready for pickup" },
-    { status: "IN_TRANSIT", label: "Mark in transit" },
-  ],
-  READY_FOR_PICKUP: [{ status: "DELIVERED", label: "Mark delivered" }],
-  IN_TRANSIT: [{ status: "DELIVERED", label: "Mark delivered" }],
+const NEXT_STATUS_LABELS: Record<string, string> = {
+  PROCESSING: "Start processing",
+  READY_FOR_PICKUP: "Mark ready for pickup",
+  IN_TRANSIT: "Mark in transit",
+  DELIVERED: "Mark delivered",
 };
 
 export default async function SellerOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +32,7 @@ export default async function SellerOrderDetailPage({ params }: { params: Promis
   }
 
   const myItems = order.items.filter((item) => item.product.seller.userId === session.userId);
-  const nextOptions = NEXT_STATUS_OPTIONS[order.status] ?? [];
+  const nextOptions = getAllowedNextStatuses("SELLER", order.status);
 
   return (
     <div className="flex flex-col gap-6">
@@ -55,12 +52,12 @@ export default async function SellerOrderDetailPage({ params }: { params: Promis
             <CardTitle>Update fulfillment</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            {nextOptions.map((option) => (
-              <form key={option.status} action={advanceOrderStatusAction}>
+            {nextOptions.map((status) => (
+              <form key={status} action={advanceOrderStatusAction}>
                 <input type="hidden" name="orderId" value={order.id} />
-                <input type="hidden" name="nextStatus" value={option.status} />
+                <input type="hidden" name="nextStatus" value={status} />
                 <Button type="submit" variant="accent" size="sm">
-                  {option.label}
+                  {NEXT_STATUS_LABELS[status] ?? status.replaceAll("_", " ")}
                 </Button>
               </form>
             ))}
@@ -104,6 +101,24 @@ export default async function SellerOrderDetailPage({ params }: { params: Promis
                 min="0"
                 label="Delivery fee (optional)"
                 defaultValue={order.delivery?.deliveryFee ? Number(order.delivery.deliveryFee) : ""}
+              />
+              <Input
+                name="courier"
+                label="Courier (required for delivery partner)"
+                placeholder="GIG Logistics"
+                defaultValue={order.delivery?.courier ?? ""}
+              />
+              <Input
+                name="trackingCode"
+                label="Tracking code (required for delivery partner)"
+                placeholder="GIG-123456"
+                defaultValue={order.delivery?.trackingCode ?? ""}
+              />
+              <Input
+                name="estimatedAt"
+                type="date"
+                label="Estimated delivery date (optional)"
+                defaultValue={order.delivery?.estimatedAt ? order.delivery.estimatedAt.toISOString().slice(0, 10) : ""}
               />
               <Button type="submit" variant="secondary" className="self-start">
                 Save delivery details

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth/rbac";
 import { confirmDeliveryAsBuyer } from "@/services/orders/order.service";
 import { fileDispute } from "@/services/disputes/dispute.service";
+import { createReview } from "@/services/products/review.service";
 import { isAppError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
 import type { DisputeType } from "@/generated/prisma/enums";
@@ -39,4 +40,26 @@ export async function fileDisputeAction(_prevState: FileDisputeState, formData: 
 
   revalidatePath(ROUTES.order(orderId));
   return { success: true };
+}
+
+export interface CreateReviewState {
+  error?: string;
+}
+
+export async function createReviewAction(orderId: string, _prevState: CreateReviewState, formData: FormData): Promise<CreateReviewState> {
+  const session = await requireAuth();
+
+  try {
+    await createReview(session.userId, {
+      orderItemId: String(formData.get("orderItemId")),
+      rating: Number(formData.get("rating")),
+      comment: String(formData.get("comment") || "").trim() || undefined,
+    });
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(ROUTES.order(orderId));
+  return {};
 }

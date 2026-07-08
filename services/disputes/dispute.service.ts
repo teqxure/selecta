@@ -2,8 +2,10 @@ import "server-only";
 import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
 import { releaseTransaction, refundTransaction } from "@/services/payments/payment.service";
+import { transitionOrderStatus } from "@/services/orders/order-state-machine";
 import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
 import type { DisputeType } from "@/generated/prisma/enums";
+import type { OrderStatus } from "@/generated/prisma/enums";
 
 export interface FileDisputeInput {
   orderId: string;
@@ -17,8 +19,12 @@ export interface FileDisputeInput {
  * A buyer reporting a problem with one seller's part of an order — Dispute
  * is scoped to (order, seller) since a multi-seller order can have an
  * issue with only one of them. Opening a dispute moves the whole Order to
- * DISPUTED as a side branch of the normal lifecycle; it doesn't touch
- * escrow by itself — that only happens once an admin resolves it below.
+ * DISPUTED as a side branch of the normal lifecycle (validated by the
+ * shared state machine — a buyer can only do this from an order that's
+ * actually been paid for, not e.g. one still AWAITING_PAYMENT or already
+ * CANCELLED). If the order is already DISPUTED (a different seller's
+ * dispute is still open), there's nothing to transition — we just add
+ * this seller's Dispute row alongside it.
  */
 export async function fileDispute(buyerId: string, input: FileDisputeInput) {
   const order = await db.order.findUnique({
@@ -32,28 +38,26 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
   if (!sellerHasItemsInOrder) throw new ValidationError("That seller has no items in this order");
 
   const existing = await db.dispute.findFirst({
-    where: { orderId: input.orderId, sellerId: input.sellerId, status: { notIn: ["CLOSED"] } },
+    where: { orderId: input.orderId, sellerId: input.sellerId, status: { in: ["OPEN", "UNDER_REVIEW"] } },
   });
   if (existing) throw new ValidationError("You already have an open dispute for this seller on this order");
 
-  const dispute = await db.$transaction(async (tx) => {
-    const created = await tx.dispute.create({
-      data: {
-        orderId: input.orderId,
-        buyerId,
-        sellerId: input.sellerId,
-        type: input.type,
-        description: input.description,
-        evidenceUrls: input.evidenceUrls ?? [],
-      },
+  if (order.status !== "DISPUTED") {
+    await transitionOrderStatus(input.orderId, { type: "BUYER", userId: buyerId }, "DISPUTED", {
+      note: `Dispute opened: ${input.type}`,
+      skipNotification: true,
     });
+  }
 
-    await tx.order.update({ where: { id: input.orderId }, data: { status: "DISPUTED" } });
-    await tx.orderStatusHistory.create({
-      data: { orderId: input.orderId, status: "DISPUTED", actorId: buyerId, note: `Dispute opened: ${input.type}` },
-    });
-
-    return created;
+  const dispute = await db.dispute.create({
+    data: {
+      orderId: input.orderId,
+      buyerId,
+      sellerId: input.sellerId,
+      type: input.type,
+      description: input.description,
+      evidenceUrls: input.evidenceUrls ?? [],
+    },
   });
 
   const sellerProfile = await db.sellerProfile.findUniqueOrThrow({ where: { id: input.sellerId } });
@@ -95,11 +99,10 @@ export async function getDisputeForAdmin(disputeId: string) {
 
 export async function markDisputeUnderReview(adminId: string, disputeId: string) {
   return db.$transaction(async (tx) => {
-    const dispute = await tx.dispute.findUnique({ where: { id: disputeId } });
-    if (!dispute) throw new NotFoundError("Dispute");
-    if (dispute.status !== "OPEN") throw new ValidationError("Only open disputes can move to under review");
+    const claim = await tx.dispute.updateMany({ where: { id: disputeId, status: "OPEN" }, data: { status: "UNDER_REVIEW" } });
+    if (claim.count === 0) throw new ValidationError("Only open disputes can move to under review");
 
-    const updated = await tx.dispute.update({ where: { id: disputeId }, data: { status: "UNDER_REVIEW" } });
+    const updated = await tx.dispute.findUniqueOrThrow({ where: { id: disputeId } });
     await tx.auditLog.create({
       data: { actorId: adminId, action: "DISPUTE_UNDER_REVIEW", entityType: "Dispute", entityId: disputeId },
     });
@@ -115,13 +118,46 @@ async function findEscrowedTransaction(orderId: string, sellerId: string) {
   return transaction;
 }
 
+/**
+ * The order-level status only ever reflects ONE outcome, but a
+ * multi-seller order can have several sellers' disputes in flight at
+ * once — only actually move the order out of DISPUTED once every seller's
+ * dispute on it has been resolved, and only using the LATEST resolution's
+ * outcome (a known simplification: this schema has no way to represent
+ * "refunded for seller A, completed for seller B" at the order level).
+ */
+async function transitionOrderOutOfDisputeIfClear(
+  orderId: string,
+  disputeId: string,
+  adminId: string,
+  resolutionStatus: "COMPLETED" | "REFUNDED",
+) {
+  // Exclude the dispute we're in the middle of resolving — its status
+  // hasn't been flipped to RESOLVED_* yet at this point, so without this
+  // exclusion it would always count itself as "still open" and this
+  // would never fire.
+  const stillOpen = await db.dispute.count({
+    where: { orderId, status: { in: ["OPEN", "UNDER_REVIEW"] }, id: { not: disputeId } },
+  });
+  if (stillOpen > 0) return;
+
+  await transitionOrderStatus(orderId, { type: "ADMIN", userId: adminId }, resolutionStatus, {
+    note: "Dispute resolved",
+    skipNotification: true,
+  });
+}
+
 /** Sides with the buyer: the seller's escrowed transaction is refunded, not released. */
 export async function resolveDisputeWithRefund(adminId: string, disputeId: string, resolution: string) {
   const dispute = await db.dispute.findUnique({ where: { id: disputeId } });
   if (!dispute) throw new NotFoundError("Dispute");
+  if (dispute.status !== "OPEN" && dispute.status !== "UNDER_REVIEW") {
+    throw new ValidationError("This dispute has already been resolved");
+  }
 
   const transaction = await findEscrowedTransaction(dispute.orderId, dispute.sellerId);
   await refundTransaction(transaction.id, adminId);
+  await transitionOrderOutOfDisputeIfClear(dispute.orderId, disputeId, adminId, "REFUNDED");
 
   return finalizeDisputeResolution(adminId, disputeId, "RESOLVED_REFUND", resolution);
 }
@@ -130,16 +166,51 @@ export async function resolveDisputeWithRefund(adminId: string, disputeId: strin
 export async function resolveDisputeWithRelease(adminId: string, disputeId: string, resolution: string) {
   const dispute = await db.dispute.findUnique({ where: { id: disputeId } });
   if (!dispute) throw new NotFoundError("Dispute");
+  if (dispute.status !== "OPEN" && dispute.status !== "UNDER_REVIEW") {
+    throw new ValidationError("This dispute has already been resolved");
+  }
 
   const transaction = await findEscrowedTransaction(dispute.orderId, dispute.sellerId);
   await releaseTransaction(transaction.id, adminId);
+  await transitionOrderOutOfDisputeIfClear(dispute.orderId, disputeId, adminId, "COMPLETED");
 
   return finalizeDisputeResolution(adminId, disputeId, "RESOLVED_RELEASE", resolution);
 }
 
-/** Closes a dispute with no financial action — e.g. determined invalid or withdrawn. */
+/** Closes a dispute with no financial action — e.g. determined invalid or withdrawn. Reverts the order to whatever it was before the dispute, if nothing else is still disputing it. */
 export async function closeDisputeWithoutAction(adminId: string, disputeId: string, resolution: string) {
+  const dispute = await db.dispute.findUnique({ where: { id: disputeId } });
+  if (!dispute) throw new NotFoundError("Dispute");
+  if (dispute.status !== "OPEN" && dispute.status !== "UNDER_REVIEW") {
+    throw new ValidationError("This dispute has already been resolved");
+  }
+
+  const stillOpen = await db.dispute.count({
+    where: { orderId: dispute.orderId, status: { in: ["OPEN", "UNDER_REVIEW"] }, id: { not: disputeId } },
+  });
+  if (stillOpen === 0) {
+    const revertTo = await findPreDisputeStatus(dispute.orderId);
+    if (revertTo) {
+      await transitionOrderStatus(dispute.orderId, { type: "ADMIN", userId: adminId }, revertTo, {
+        note: "Dispute closed without action — order resumed",
+        skipNotification: true,
+      });
+    }
+  }
+
   return finalizeDisputeResolution(adminId, disputeId, "CLOSED", resolution);
+}
+
+/** The order's status immediately before it most recently entered DISPUTED — what to revert to when a dispute is closed with no action. */
+async function findPreDisputeStatus(orderId: string): Promise<OrderStatus | null> {
+  const history = await db.orderStatusHistory.findMany({ where: { orderId }, orderBy: { createdAt: "asc" } });
+  let preDispute: OrderStatus | null = null;
+  for (let i = 0; i < history.length; i++) {
+    if (history[i].status === "DISPUTED" && i > 0) {
+      preDispute = history[i - 1].status;
+    }
+  }
+  return preDispute;
 }
 
 async function finalizeDisputeResolution(
@@ -149,10 +220,13 @@ async function finalizeDisputeResolution(
   resolution: string,
 ) {
   const result = await db.$transaction(async (tx) => {
-    const dispute = await tx.dispute.update({
-      where: { id: disputeId },
+    const claim = await tx.dispute.updateMany({
+      where: { id: disputeId, status: { in: ["OPEN", "UNDER_REVIEW"] } },
       data: { status, resolution, resolvedById: adminId, resolvedAt: new Date() },
     });
+    if (claim.count === 0) throw new ValidationError("This dispute has already been resolved");
+
+    const dispute = await tx.dispute.findUniqueOrThrow({ where: { id: disputeId } });
 
     await tx.auditLog.create({
       data: {

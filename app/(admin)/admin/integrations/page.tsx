@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { listIntegrationSettings } from "@/services/platform/integration-settings.service";
+import { findProviderSpec } from "@/lib/constants/integration-providers";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,10 +11,10 @@ import { Plug } from "lucide-react";
 import {
   upsertIntegrationSettingAction,
   setIntegrationSecretAction,
+  setIntegrationSecretsAction,
   deleteIntegrationSecretAction,
 } from "./actions";
-
-const CATEGORIES = ["PAYMENT", "STORAGE", "EMAIL", "SMS", "AI"] as const;
+import { AddProviderForm } from "./add-provider-form";
 
 export default async function AdminIntegrationsPage() {
   await requireRole(Role.SUPER_ADMIN);
@@ -38,100 +39,107 @@ export default async function AdminIntegrationsPage() {
           {integrations.length === 0 && (
             <EmptyState icon={Plug} title="No integrations configured" description="Add a provider below to get started." />
           )}
-          {integrations.map((integration) => (
-            <div key={integration.id} className="rounded-xl border border-border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-foreground">{integration.provider}</span>
-                  <Badge tone="neutral">{integration.category}</Badge>
-                  <Badge tone={integration.isEnabled ? "success" : "neutral"}>
-                    {integration.isEnabled ? "Enabled" : "Disabled"}
-                  </Badge>
-                  {integration.isPrimary && <Badge tone="accent">Primary</Badge>}
-                </div>
-                <form action={upsertIntegrationSettingAction} className="flex items-center gap-2">
-                  <input type="hidden" name="category" value={integration.category} />
-                  <input type="hidden" name="provider" value={integration.provider} />
-                  {!integration.isEnabled && <input type="hidden" name="isEnabled" value="on" />}
-                  <input type="hidden" name="isPrimary" value={integration.isPrimary ? "on" : ""} />
-                  <Button type="submit" size="sm" variant={integration.isEnabled ? "outline" : "secondary"}>
-                    {integration.isEnabled ? "Disable" : "Enable"}
-                  </Button>
-                </form>
-                {integration.isEnabled && !integration.isPrimary && (
-                  <form action={upsertIntegrationSettingAction}>
+          {integrations.map((integration) => {
+            const spec = findProviderSpec(integration.category, integration.provider);
+            const secretsByKey = new Map(integration.secrets.map((secret) => [secret.key, secret]));
+
+            return (
+              <div key={integration.id} className="rounded-xl border border-border p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground">{spec?.label ?? integration.provider}</span>
+                    <Badge tone="neutral">{integration.category}</Badge>
+                    <Badge tone={integration.isEnabled ? "success" : "neutral"}>
+                      {integration.isEnabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                    {integration.isPrimary && <Badge tone="accent">Primary</Badge>}
+                    {spec?.notYetWired && <Badge tone="warning">Stored only — not yet live</Badge>}
+                  </div>
+                  <form action={upsertIntegrationSettingAction} className="flex items-center gap-2">
                     <input type="hidden" name="category" value={integration.category} />
                     <input type="hidden" name="provider" value={integration.provider} />
-                    <input type="hidden" name="isEnabled" value="on" />
-                    <input type="hidden" name="isPrimary" value="on" />
-                    <Button type="submit" size="sm" variant="accent">
-                      Make primary
+                    {!integration.isEnabled && <input type="hidden" name="isEnabled" value="on" />}
+                    <input type="hidden" name="isPrimary" value={integration.isPrimary ? "on" : ""} />
+                    <Button type="submit" size="sm" variant={integration.isEnabled ? "outline" : "secondary"}>
+                      {integration.isEnabled ? "Disable" : "Enable"}
                     </Button>
                   </form>
-                )}
-              </div>
-
-              <div className="mt-4 flex flex-col gap-2">
-                {integration.secrets.map((secret) => (
-                  <div key={secret.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {secret.key}: ********************{secret.lastFourDisplay}
-                    </span>
-                    <form action={deleteIntegrationSecretAction}>
-                      <input type="hidden" name="id" value={secret.id} />
-                      <Button type="submit" size="sm" variant="ghost">
-                        Remove
+                  {integration.isEnabled && !integration.isPrimary && (
+                    <form action={upsertIntegrationSettingAction}>
+                      <input type="hidden" name="category" value={integration.category} />
+                      <input type="hidden" name="provider" value={integration.provider} />
+                      <input type="hidden" name="isEnabled" value="on" />
+                      <input type="hidden" name="isPrimary" value="on" />
+                      <Button type="submit" size="sm" variant="accent">
+                        Make primary
                       </Button>
                     </form>
-                  </div>
-                ))}
+                  )}
+                </div>
 
-                <form action={setIntegrationSecretAction} className="flex items-end gap-2 pt-1">
-                  <input type="hidden" name="integrationSettingId" value={integration.id} />
-                  <Input name="key" placeholder="SECRET_KEY" className="h-9 flex-1" />
-                  <Input name="value" type="password" placeholder="Value" className="h-9 flex-1" />
-                  <Button type="submit" size="sm" variant="secondary">
-                    Save secret
-                  </Button>
-                </form>
+                <div className="mt-4 flex flex-col gap-3">
+                  {spec ? (
+                    <form action={setIntegrationSecretsAction} className="flex flex-col gap-3">
+                      <input type="hidden" name="integrationSettingId" value={integration.id} />
+                      <input type="hidden" name="category" value={integration.category} />
+                      <input type="hidden" name="provider" value={integration.provider} />
+                      {spec.fields.map((field) => {
+                        const existing = secretsByKey.get(field.key);
+                        return (
+                          <Input
+                            key={field.key}
+                            name={field.key}
+                            type="password"
+                            label={field.label}
+                            placeholder={existing ? `********************${existing.lastFourDisplay}` : field.placeholder}
+                            helperText={field.helperText}
+                          />
+                        );
+                      })}
+                      <Button type="submit" size="sm" variant="secondary" className="self-start">
+                        Save credentials
+                      </Button>
+                    </form>
+                  ) : (
+                    <>
+                      {integration.secrets.map((secret) => (
+                        <div key={secret.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {secret.key}: ********************{secret.lastFourDisplay}
+                          </span>
+                          <form action={deleteIntegrationSecretAction}>
+                            <input type="hidden" name="id" value={secret.id} />
+                            <Button type="submit" size="sm" variant="ghost">
+                              Remove
+                            </Button>
+                          </form>
+                        </div>
+                      ))}
+
+                      <form action={setIntegrationSecretAction} className="flex items-end gap-2 pt-1">
+                        <input type="hidden" name="integrationSettingId" value={integration.id} />
+                        <Input name="key" placeholder="SECRET_KEY" className="h-9 flex-1" />
+                        <Input name="value" type="password" placeholder="Value" className="h-9 flex-1" />
+                        <Button type="submit" size="sm" variant="secondary">
+                          Save secret
+                        </Button>
+                      </form>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>Add provider</CardTitle>
+          <CardDescription>Choosing a known provider shows exactly the credential fields it needs.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={upsertIntegrationSettingAction} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="category" className="text-sm font-medium text-foreground">
-                Category
-              </label>
-              <select
-                id="category"
-                name="category"
-                defaultValue="PAYMENT"
-                className="h-11 rounded-lg border border-border bg-background px-4 text-sm text-foreground"
-              >
-                {CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Input name="provider" label="Provider" placeholder="paystack" required />
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="isEnabled" className="h-4 w-4 rounded border-border accent-[color:var(--color-burnt-orange)]" />
-              Enabled
-            </label>
-            <Button type="submit" variant="accent" className="self-start">
-              Add provider
-            </Button>
-          </form>
+          <AddProviderForm />
         </CardContent>
       </Card>
     </div>

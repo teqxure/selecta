@@ -4,12 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role, UserStatus } from "@/lib/constants/roles";
-import { createAdminSchema } from "@/lib/validators/admin-management";
+import { createAdminSchema, updateAdminPermissionsSchema } from "@/lib/validators/admin-management";
 import { createAdmin, updateAdminPermissions, setAdminStatus } from "@/services/admin/admin-management.service";
 import { getRequestMeta } from "@/lib/security/request-meta";
-import { isAppError } from "@/lib/errors";
+import { isAppError, ValidationError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
-import type { AdminPermission } from "@/lib/constants/permissions";
 
 export interface CreateAdminActionState {
   error?: string;
@@ -42,10 +41,17 @@ export async function createAdminAction(_prevState: CreateAdminActionState, form
 export async function updateAdminPermissionsAction(formData: FormData) {
   const session = await requireRole(Role.SUPER_ADMIN);
   const targetAdminId = String(formData.get("adminId"));
-  const permissions = formData.getAll("permissions") as AdminPermission[];
+
+  // Never trust the submitted permission strings as-is — only the fixed,
+  // enumerated ADMIN_PERMISSIONS set may be granted here. Without this, a
+  // crafted request (e.g. "*") could hand an ADMIN account implicit
+  // Super-Admin-equivalent authority (see hasPermission()'s wildcard check)
+  // without the account ever appearing as SUPER_ADMIN anywhere.
+  const parsed = updateAdminPermissionsSchema.safeParse({ permissions: formData.getAll("permissions") });
+  if (!parsed.success) throw new ValidationError("Invalid permissions selection");
 
   const { ipAddress } = await getRequestMeta();
-  await updateAdminPermissions(session.userId, targetAdminId, permissions, ipAddress);
+  await updateAdminPermissions(session.userId, targetAdminId, parsed.data.permissions, ipAddress);
 
   revalidatePath(ROUTES.admin.adminDetail(targetAdminId));
   revalidatePath(ROUTES.admin.admins);

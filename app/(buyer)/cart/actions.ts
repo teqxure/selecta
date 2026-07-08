@@ -7,7 +7,8 @@ import { assertCartItemsStillAvailable, clearCart } from "@/services/products/ca
 import { listAddresses } from "@/services/users/address.service";
 import { createOrder } from "@/services/orders/order.service";
 import { initiateCheckoutForOrder } from "@/services/payments/checkout.service";
-import { isAppError } from "@/lib/errors";
+import { isAppError, RateLimitError } from "@/lib/errors";
+import { checkCheckoutRateLimit } from "@/lib/security/rate-limit";
 import { db } from "@/lib/db";
 
 export interface CheckoutActionState {
@@ -20,6 +21,8 @@ export async function checkoutAction(_prevState: CheckoutActionState): Promise<C
   let redirectUrl: string;
 
   try {
+    if (!checkCheckoutRateLimit(session.userId).allowed) throw new RateLimitError();
+
     const items = await assertCartItemsStillAvailable(session.userId);
     if (items.length === 0) return { error: "Your cart is empty" };
 

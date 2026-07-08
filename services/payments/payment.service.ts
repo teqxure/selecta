@@ -2,6 +2,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
 import { getActiveCommissionRateForCategory } from "@/services/platform/commission.service";
+import { recordCustomerPayment, recordVendorCredit, recordCommissionEarned, recordRefund } from "@/services/finance/ledger.service";
+import { transitionOrderStatusInTx } from "@/services/orders/order-state-machine";
 import { NotFoundError, ValidationError, ConflictError } from "@/lib/errors";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -17,6 +19,14 @@ import type { Prisma } from "@/generated/prisma/client";
  * outcome. Never trust a frontend "payment succeeded" call: the only way
  * a Payment/Transaction moves out of PENDING is `confirmPaymentSuccess`,
  * driven exclusively by a signature-verified provider webhook.
+ *
+ * Every status transition below claims its row with a conditional
+ * `updateMany({ where: { ..., status: <expected> } })` rather than a plain
+ * `update` — that WHERE clause is evaluated against the row's live value
+ * at lock-acquisition time, not a value read earlier, so two concurrent
+ * callers (a retried webhook, a double-click) can never both win the same
+ * transition. Whichever loses sees `count === 0` and treats it as a no-op
+ * rather than double-crediting anyone.
  */
 
 export async function initiatePayment(orderId: string, provider: string) {
@@ -29,8 +39,7 @@ export async function initiatePayment(orderId: string, provider: string) {
       data: { orderId, amount: order.totalAmount, currency: order.currency, provider, status: "PENDING" },
     });
 
-    await tx.order.update({ where: { id: orderId }, data: { status: "AWAITING_PAYMENT" } });
-    await tx.orderStatusHistory.create({ data: { orderId, status: "AWAITING_PAYMENT" } });
+    await transitionOrderStatusInTx(tx, orderId, { type: "SYSTEM" }, "AWAITING_PAYMENT");
 
     return payment;
   });
@@ -39,10 +48,11 @@ export async function initiatePayment(orderId: string, provider: string) {
 /**
  * The single entry point for a provider confirming a charge succeeded.
  * Idempotent by design — providers retry webhooks, so this must be safe
- * to call twice for the same reference without double-crediting anyone.
- * Computes each seller's commission from the live CommissionRule table
- * (never a hardcoded percentage) and creates one Transaction per seller,
- * held in escrow until delivery is confirmed or an admin releases it.
+ * to call twice (or twice concurrently) for the same reference without
+ * double-crediting anyone. Computes each seller's commission from the
+ * live CommissionRule table (never a hardcoded percentage) and creates
+ * one Transaction per seller, held in escrow until delivery is confirmed
+ * or an admin releases it.
  */
 export async function confirmPaymentSuccess(paymentId: string, providerReference: string) {
   const payment = await db.payment.findUnique({ where: { id: paymentId } });
@@ -56,10 +66,13 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
     throw new ValidationError(`Cannot confirm a payment in status ${payment.status}`);
   }
 
-  const items = await db.orderItem.findMany({
-    where: { orderId: payment.orderId },
-    include: { product: { include: { seller: true } } },
-  });
+  const [order, items] = await Promise.all([
+    db.order.findUniqueOrThrow({ where: { id: payment.orderId } }),
+    db.orderItem.findMany({
+      where: { orderId: payment.orderId },
+      include: { product: { include: { seller: true } } },
+    }),
+  ]);
   if (items.length === 0) throw new NotFoundError("Order items");
 
   const bySeller = new Map<
@@ -93,11 +106,18 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
     bySeller.set(item.product.sellerId, entry);
   }
 
-  const transactions = await db.$transaction(async (tx) => {
-    const updatedPayment = await tx.payment.update({
-      where: { id: paymentId },
+  const outcome = await db.$transaction(async (tx) => {
+    // Atomic claim: only the first caller to reach this point for a given
+    // payment ever proceeds past here. A concurrent/retried call loses
+    // the race here and returns null instead of creating duplicate
+    // Transaction rows or crediting anyone twice.
+    const claim = await tx.payment.updateMany({
+      where: { id: paymentId, status: "PENDING" },
       data: { status: "HELD_IN_ESCROW", providerReference },
     });
+    if (claim.count === 0) return null;
+
+    const updatedPayment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
 
     const created = [];
     for (const [sellerId, entry] of bySeller) {
@@ -107,7 +127,7 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
         data: {
           orderId: payment.orderId,
           paymentId: payment.id,
-          buyerId: (await tx.order.findUniqueOrThrow({ where: { id: payment.orderId } })).buyerId,
+          buyerId: order.buyerId,
           sellerId,
           amount: entry.gross,
           commissionRate: blendedRate,
@@ -119,11 +139,22 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
           status: "HELD_IN_ESCROW",
         },
       });
+
+      await recordCustomerPayment(tx, {
+        amount: entry.gross,
+        userId: order.buyerId,
+        sellerId,
+        orderId: payment.orderId,
+        paymentId: payment.id,
+        transactionId: transaction.id,
+        reference: providerReference,
+        note: "Order paid, held in escrow",
+      });
+
       created.push({ transaction, userId: entry.userId });
     }
 
-    await tx.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
-    await tx.orderStatusHistory.create({ data: { orderId: payment.orderId, status: "PAID" } });
+    await transitionOrderStatusInTx(tx, payment.orderId, { type: "SYSTEM" }, "PAID");
 
     await tx.auditLog.create({
       data: {
@@ -137,8 +168,15 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
     return { updatedPayment, created };
   });
 
+  if (!outcome) {
+    // Lost the atomic claim above — another call (or an earlier delivery
+    // of this same webhook) already processed this payment.
+    const current = await db.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    return { payment: current, alreadyProcessed: true as const };
+  }
+
   await Promise.all(
-    transactions.created.map(({ userId, transaction }) =>
+    outcome.created.map(({ userId, transaction }) =>
       createNotification(
         userId,
         "PAYMENT",
@@ -148,29 +186,36 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
     ),
   );
 
-  return { payment: transactions.updatedPayment, alreadyProcessed: false as const };
+  return { payment: outcome.updatedPayment, alreadyProcessed: false as const };
 }
 
 export async function markPaymentFailed(paymentId: string) {
   return db.$transaction(async (tx) => {
-    const payment = await tx.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
-    await tx.order.update({ where: { id: payment.orderId }, data: { status: "CANCELLED" } });
-    await tx.orderStatusHistory.create({ data: { orderId: payment.orderId, status: "CANCELLED", note: "Payment failed" } });
+    // Conditional claim — a stale/out-of-order "charge.failed" delivery
+    // that arrives after the payment was already confirmed successful
+    // must never cancel an order that's actually been paid for.
+    const claim = await tx.payment.updateMany({ where: { id: paymentId, status: "PENDING" }, data: { status: "FAILED" } });
+    if (claim.count === 0) return null;
+
+    const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    await transitionOrderStatusInTx(tx, payment.orderId, { type: "SYSTEM" }, "CANCELLED", { note: "Payment failed" });
     return payment;
   });
 }
 
 async function releaseTransactionInternal(tx: Prisma.TransactionClient, transactionId: string, actorId: string | null) {
-  const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
-  if (!transaction) throw new NotFoundError("Transaction");
-  if (transaction.status !== "HELD_IN_ESCROW") {
+  const claim = await tx.transaction.updateMany({
+    where: { id: transactionId, status: "HELD_IN_ESCROW" },
+    data: { status: "RELEASED" },
+  });
+  if (claim.count === 0) {
     throw new ValidationError("Only escrowed transactions can be released");
   }
+  const released = await tx.transaction.findUniqueOrThrow({ where: { id: transactionId } });
 
-  const released = await tx.transaction.update({ where: { id: transactionId }, data: { status: "RELEASED" } });
-
-  const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: transaction.sellerId } });
-  const sellerAmount = Number(transaction.sellerAmount);
+  const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: released.sellerId } });
+  const sellerAmount = Number(released.sellerAmount);
+  const commissionAmount = Number(released.commissionAmount);
 
   await tx.wallet.upsert({
     where: { userId: sellerProfile.userId },
@@ -178,10 +223,28 @@ async function releaseTransactionInternal(tx: Prisma.TransactionClient, transact
     update: { balance: { increment: sellerAmount }, totalEarned: { increment: sellerAmount } },
   });
 
-  const items = await tx.orderItem.findMany({
-    where: { orderId: transaction.orderId, product: { sellerId: transaction.sellerId } },
+  await recordVendorCredit(tx, {
+    amount: sellerAmount,
+    userId: sellerProfile.userId,
+    sellerId: released.sellerId,
+    orderId: released.orderId,
+    transactionId: released.id,
+    actorId: actorId ?? undefined,
+    note: "Escrow released to available balance",
   });
-  await tx.sellerProfile.update({ where: { id: transaction.sellerId }, data: { totalSales: { increment: items.length } } });
+  await recordCommissionEarned(tx, {
+    amount: commissionAmount,
+    sellerId: released.sellerId,
+    orderId: released.orderId,
+    transactionId: released.id,
+    actorId: actorId ?? undefined,
+    note: "Commission realized on escrow release",
+  });
+
+  const items = await tx.orderItem.findMany({
+    where: { orderId: released.orderId, product: { sellerId: released.sellerId } },
+  });
+  await tx.sellerProfile.update({ where: { id: released.sellerId }, data: { totalSales: { increment: items.length } } });
   await tx.product.updateMany({ where: { id: { in: items.map((item) => item.productId) } }, data: { status: "SOLD" } });
 
   await tx.auditLog.create({
@@ -231,20 +294,44 @@ export async function releaseOrderTransactions(orderId: string, actorId: string 
   return results.map((result) => result.transaction);
 }
 
-/** Dispute-driven refund of a single seller's escrowed transaction — no wallet credit. */
+/**
+ * Dispute-driven refund of a single seller's escrowed transaction — no
+ * wallet credit. If this was the last still-held transaction on its
+ * parent Payment, the Payment itself is marked REFUNDED too, so it never
+ * sits at a stale HELD_IN_ESCROW forever after every seller's cut has
+ * actually been refunded.
+ */
 export async function refundTransaction(transactionId: string, actorId: string) {
   return db.$transaction(async (tx) => {
-    const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
-    if (!transaction) throw new NotFoundError("Transaction");
-    if (transaction.status !== "HELD_IN_ESCROW") {
+    const claim = await tx.transaction.updateMany({
+      where: { id: transactionId, status: "HELD_IN_ESCROW" },
+      data: { status: "REFUNDED" },
+    });
+    if (claim.count === 0) {
       throw new ValidationError("Only escrowed transactions can be refunded");
     }
+    const refunded = await tx.transaction.findUniqueOrThrow({ where: { id: transactionId } });
 
-    const refunded = await tx.transaction.update({ where: { id: transactionId }, data: { status: "REFUNDED" } });
+    await recordRefund(tx, {
+      amount: Number(refunded.amount),
+      userId: refunded.buyerId,
+      sellerId: refunded.sellerId,
+      orderId: refunded.orderId,
+      transactionId: refunded.id,
+      actorId,
+      note: "Transaction refunded",
+    });
 
     await tx.auditLog.create({
       data: { actorId, action: "TRANSACTION_REFUNDED", entityType: "Transaction", entityId: transactionId },
     });
+
+    if (refunded.paymentId) {
+      const siblings = await tx.transaction.findMany({ where: { paymentId: refunded.paymentId } });
+      if (siblings.every((sibling) => sibling.status === "REFUNDED")) {
+        await tx.payment.update({ where: { id: refunded.paymentId }, data: { status: "REFUNDED" } });
+      }
+    }
 
     return refunded;
   });

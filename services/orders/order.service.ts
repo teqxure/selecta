@@ -3,24 +3,10 @@ import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
 import { releaseOrderTransactions } from "@/services/payments/payment.service";
 import { syncDeliveryStatus } from "@/services/logistics/delivery.service";
-import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
+import { transitionOrderStatus } from "@/services/orders/order-state-machine";
+import { NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors";
 import type { Address } from "@/types";
 import type { OrderStatus } from "@/generated/prisma/enums";
-
-/**
- * Forward transitions a seller may drive themselves — anything not listed
- * here (payment moving CREATED/AWAITING_PAYMENT/PAID, or the terminal
- * DISPUTED/CANCELLED/COMPLETED states) is system-, buyer-, or
- * admin-driven only. One Order can span multiple sellers, so any seller
- * with at least one item in the order may advance it — see
- * `advanceOrderStatusAsSeller`.
- */
-const SELLER_ADVANCEABLE_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  PAID: ["PROCESSING"],
-  PROCESSING: ["READY_FOR_PICKUP", "IN_TRANSIT"],
-  READY_FOR_PICKUP: ["DELIVERED"],
-  IN_TRANSIT: ["DELIVERED"],
-};
 
 interface OrderLineInput {
   productId: string;
@@ -191,36 +177,12 @@ export function getPendingOrdersCountForSeller(sellerId: string) {
  * READY_FOR_PICKUP/IN_TRANSIT -> DELIVERED). Any seller with items in the
  * order may drive it — Order.status is shared across all sellers in a
  * multi-seller order, there's no per-seller sub-status in this schema.
+ * All validation (ownership, legal transition, race-safety) lives in
+ * `transitionOrderStatus` — this is a thin, named entry point onto it.
  */
 export async function advanceOrderStatusAsSeller(orderId: string, sellerUserId: string, nextStatus: OrderStatus, note?: string) {
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    include: { items: { include: { product: { include: { seller: true } } } } },
-  });
-  if (!order) throw new NotFoundError("Order");
-
-  const ownsOrder = order.items.some((item) => item.product.seller.userId === sellerUserId);
-  if (!ownsOrder) throw new ForbiddenError("You don't have any items in this order");
-
-  const allowed = SELLER_ADVANCEABLE_TRANSITIONS[order.status] ?? [];
-  if (!allowed.includes(nextStatus)) {
-    throw new ValidationError(`Cannot move an order from ${order.status} to ${nextStatus}`);
-  }
-
-  await db.$transaction(async (tx) => {
-    await tx.order.update({ where: { id: orderId }, data: { status: nextStatus } });
-    await tx.orderStatusHistory.create({ data: { orderId, status: nextStatus, actorId: sellerUserId, note } });
-  });
-
+  await transitionOrderStatus(orderId, { type: "SELLER", userId: sellerUserId }, nextStatus, { note });
   await syncDeliveryStatus(orderId, nextStatus, note);
-
-  await createNotification(
-    order.buyerId,
-    "ORDER",
-    "Order update",
-    `Your order #${orderId.slice(-8)} is now ${nextStatus.replaceAll("_", " ").toLowerCase()}.`,
-  );
-
   return nextStatus;
 }
 
@@ -231,19 +193,12 @@ export async function advanceOrderStatusAsSeller(orderId: string, sellerUserId: 
  * escrow release; the other half is `adminSetOrderStatus` below.
  */
 export async function confirmDeliveryAsBuyer(orderId: string, buyerId: string) {
-  const order = await db.order.findUnique({ where: { id: orderId } });
-  if (!order) throw new NotFoundError("Order");
-  if (order.buyerId !== buyerId) throw new ForbiddenError();
-  if (order.status !== "DELIVERED") {
-    throw new ValidationError("Only orders marked delivered can be confirmed received");
-  }
-
-  await db.$transaction(async (tx) => {
-    await tx.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } });
-    await tx.orderStatusHistory.create({
-      data: { orderId, status: "COMPLETED", actorId: buyerId, note: "Delivery confirmed by buyer" },
-    });
-  });
+  await transitionOrderStatus(
+    orderId,
+    { type: "BUYER", userId: buyerId },
+    "COMPLETED",
+    { note: "Delivery confirmed by buyer" },
+  );
 
   await releaseOrderTransactions(orderId, buyerId);
 
@@ -251,40 +206,31 @@ export async function confirmDeliveryAsBuyer(orderId: string, buyerId: string) {
 }
 
 /**
- * Admin override — can force any status, including completing an order
- * (and therefore releasing escrow) without waiting on the buyer, e.g. to
- * resolve a dispute or unblock a stuck order. Every override is audited.
+ * Admin override — can drive any transition the state machine considers
+ * legal at all (see order-state-machine.ts's FORWARD_TRANSITIONS), e.g.
+ * to resolve a dispute or unblock a stuck order — but never a transition
+ * that isn't in that graph (a completed order still can't become
+ * cancelled, even for an admin). Every override is audited in addition to
+ * the ordinary status-history record every transition gets.
  */
 export async function adminSetOrderStatus(orderId: string, adminId: string, nextStatus: OrderStatus, note?: string) {
-  const order = await db.order.findUnique({ where: { id: orderId } });
-  if (!order) throw new NotFoundError("Order");
+  const { previousStatus } = await transitionOrderStatus(orderId, { type: "ADMIN", userId: adminId }, nextStatus, { note });
 
-  await db.$transaction(async (tx) => {
-    await tx.order.update({ where: { id: orderId }, data: { status: nextStatus } });
-    await tx.orderStatusHistory.create({ data: { orderId, status: nextStatus, actorId: adminId, note } });
-    await tx.auditLog.create({
-      data: {
-        actorId: adminId,
-        action: "ORDER_STATUS_OVERRIDDEN",
-        entityType: "Order",
-        entityId: orderId,
-        metadata: { from: order.status, to: nextStatus, note } as object,
-      },
-    });
+  await db.auditLog.create({
+    data: {
+      actorId: adminId,
+      action: "ORDER_STATUS_OVERRIDDEN",
+      entityType: "Order",
+      entityId: orderId,
+      metadata: { from: previousStatus, to: nextStatus, note } as object,
+    },
   });
 
-  if (nextStatus === "COMPLETED" && order.status !== "COMPLETED") {
+  if (nextStatus === "COMPLETED") {
     await releaseOrderTransactions(orderId, adminId);
   }
 
   await syncDeliveryStatus(orderId, nextStatus, note);
-
-  await createNotification(
-    order.buyerId,
-    "ORDER",
-    "Order update",
-    `Your order #${orderId.slice(-8)} is now ${nextStatus.replaceAll("_", " ").toLowerCase()}.`,
-  );
 
   return nextStatus;
 }

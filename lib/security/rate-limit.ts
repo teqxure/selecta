@@ -35,3 +35,18 @@ export function checkRateLimit(key: string, limit: number, windowSeconds: number
 export function checkLoginRateLimit(identifier: string) {
   return checkRateLimit(`login:${identifier}`, 10, 15 * 60);
 }
+
+/** Messages sent: 20 per 5 minutes per user — real conversation pace, not spam-bot pace. */
+export function checkMessageRateLimit(userId: string) {
+  return checkRateLimit(`message:${userId}`, 20, 5 * 60);
+}
+
+/** New conversations started ("contact seller"): 10 per hour per user. */
+export function checkConversationRateLimit(userId: string) {
+  return checkRateLimit(`conversation:${userId}`, 10, 60 * 60);
+}
+
+/** Checkout attempts: 8 per 5 minutes per user — throttles repeated hits to the payment provider. */
+export function checkCheckoutRateLimit(userId: string) {
+  return checkRateLimit(`checkout:${userId}`, 8, 5 * 60);
+}

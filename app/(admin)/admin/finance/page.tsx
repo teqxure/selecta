@@ -1,7 +1,7 @@
-import { Wallet, TrendingUp, Clock, Banknote, Undo2, AlertTriangle } from "lucide-react";
+import { Wallet, TrendingUp, Clock, Banknote, Undo2, AlertTriangle, HandCoins } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
-import { getFinanceOverview, getMonthlyRevenueHistory } from "@/services/platform/finance.service";
+import { getFinanceOverview, getMonthlyRevenueHistory, getSellerPerformance } from "@/services/platform/finance.service";
 import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
@@ -10,7 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 export default async function AdminFinancePage() {
   await requireRole(Role.SUPER_ADMIN);
 
-  const [overview, history] = await Promise.all([getFinanceOverview(), getMonthlyRevenueHistory(6)]);
+  const [overview, history, sellerPerformance] = await Promise.all([
+    getFinanceOverview(),
+    getMonthlyRevenueHistory(6),
+    getSellerPerformance(8),
+  ]);
 
   const format = (value: number) =>
     new Intl.NumberFormat("en-NG", { style: "currency", currency: DEFAULT_CURRENCY, maximumFractionDigits: 0 }).format(value);
@@ -20,13 +24,18 @@ export default async function AdminFinancePage() {
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selecta HQ</p>
         <h1 className="font-display text-2xl font-semibold text-foreground">Finance</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Historical figures below are summed from the append-only financial ledger, not from mutable order/transaction status.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label="Gross merchandise value" icon={Wallet} value={format(overview.gmv)} />
+        <StatCard label="Platform revenue" icon={TrendingUp} value={format(overview.platformRevenue)} />
         <StatCard label="Commission earned (realized)" icon={TrendingUp} value={format(overview.commissionEarned)} />
         <StatCard label="Held in escrow" icon={Clock} value={format(overview.heldInEscrow)} />
-        <StatCard label="Paid out to sellers" icon={Banknote} value={format(overview.payoutsPaid)} />
+        <StatCard label="Pending payouts (available, not withdrawn)" icon={HandCoins} value={format(overview.pendingPayouts)} />
+        <StatCard label="Completed payouts" icon={Banknote} value={format(overview.payoutsPaid)} />
         <StatCard
           label="Refunded"
           icon={Undo2}
@@ -62,6 +71,22 @@ export default async function AdminFinancePage() {
         </CardHeader>
         <CardContent>
           <BarChart data={history.map((month) => ({ label: month.label, value: Math.round(month.commission), tone: "muted" }))} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Seller performance</CardTitle>
+          <CardDescription>Top sellers by realized commission contributed to the platform, all-time.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sellerPerformance.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No released transactions yet.</p>
+          ) : (
+            <BarChart
+              data={sellerPerformance.map((seller) => ({ label: seller.label, value: Math.round(seller.commissionContributed) }))}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

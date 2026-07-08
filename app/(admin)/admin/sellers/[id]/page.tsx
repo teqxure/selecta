@@ -1,14 +1,19 @@
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/rbac";
+import { currentUser } from "@/lib/auth/current-user";
+import { Role } from "@/lib/constants/roles";
 import { db } from "@/lib/db";
 import { getSellerAnalytics } from "@/services/analytics/analytics.service";
 import { listAgents } from "@/services/sellers/seller.service";
 import { getProductStatusCounts } from "@/services/products/product.service";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { getSellerBalances } from "@/services/payments/payment.service";
+import { DEFAULT_CURRENCY } from "@/lib/constants/app";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { suspendSellerAction, reinstateSellerAction, assignAgentAction } from "./actions";
+import { suspendSellerAction, reinstateSellerAction, assignAgentAction, manualAdjustmentAction } from "./actions";
 
 export default async function AdminSellerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("vendors.manage");
@@ -17,13 +22,18 @@ export default async function AdminSellerDetailPage({ params }: { params: Promis
   const seller = await db.sellerProfile.findUnique({ where: { id }, include: { user: true, agent: true } });
   if (!seller) notFound();
 
-  const [analytics, statusCounts, agents] = await Promise.all([
+  const [analytics, statusCounts, agents, viewer, balances] = await Promise.all([
     getSellerAnalytics(seller.id),
     getProductStatusCounts(seller.id),
     listAgents(),
+    currentUser(),
+    getSellerBalances(seller.id),
   ]);
 
   const isSuspended = seller.verificationStatus === "SUSPENDED";
+  const isSuperAdmin = viewer?.role === Role.SUPER_ADMIN;
+  const format = (value: number) =>
+    new Intl.NumberFormat("en-NG", { style: "currency", currency: DEFAULT_CURRENCY }).format(value);
 
   return (
     <div className="flex flex-col gap-6">
@@ -105,6 +115,37 @@ export default async function AdminSellerDetailPage({ params }: { params: Promis
           )}
         </CardContent>
       </Card>
+
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Wallet &amp; manual adjustment</CardTitle>
+            <CardDescription>
+              Available {format(balances.available)} · Held in escrow {format(balances.held)} · Withdrawn{" "}
+              {format(balances.withdrawn)} · Lifetime {format(balances.lifetime)}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={manualAdjustmentAction} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="sellerProfileId" value={seller.id} />
+              <Input
+                name="amount"
+                type="number"
+                step="0.01"
+                label="Amount"
+                helperText="Positive to credit, negative to debit"
+                placeholder="1000 or -1000"
+                className="w-40"
+                required
+              />
+              <Input name="reason" label="Reason" placeholder="Required — shown to the seller" className="flex-1" required />
+              <Button type="submit" variant="accent" size="sm">
+                Apply adjustment
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

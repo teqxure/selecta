@@ -38,6 +38,9 @@ export interface DeliveryDetailsInput {
   method: DeliveryMethod;
   pickupLocation?: string | null;
   deliveryFee?: number | null;
+  courier?: string | null;
+  trackingCode?: string | null;
+  estimatedAt?: Date | null;
 }
 
 /** Seller sets how this order will actually reach the buyer — before it leaves PROCESSING. */
@@ -54,6 +57,9 @@ export async function setDeliveryDetails(orderId: string, sellerUserId: string, 
   if (input.method === "MANUAL" && !input.pickupLocation) {
     throw new ValidationError("A pickup location is required for manual delivery");
   }
+  if (input.method === "PARTNER" && (!input.courier || !input.trackingCode)) {
+    throw new ValidationError("A courier name and tracking code are required for partner delivery");
+  }
 
   const delivery = await ensureDelivery(orderId);
   return db.delivery.update({
@@ -62,6 +68,9 @@ export async function setDeliveryDetails(orderId: string, sellerUserId: string, 
       method: input.method,
       pickupLocation: input.pickupLocation ?? null,
       deliveryFee: input.deliveryFee ?? null,
+      courier: input.courier ?? null,
+      trackingCode: input.trackingCode ?? null,
+      estimatedAt: input.estimatedAt ?? null,
     },
   });
 }

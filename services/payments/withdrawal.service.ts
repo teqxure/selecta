@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
+import { recordWithdrawalRequest, recordWithdrawalPaid, recordAdjustment } from "@/services/finance/ledger.service";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 
 export interface WithdrawalRequestInput {
@@ -15,21 +16,30 @@ export interface WithdrawalRequestInput {
  * immediately (rather than only at approval time) — otherwise a seller
  * could file several overlapping requests against the same balance before
  * any of them are reviewed. Rejection restores the reservation; approval
- * (`processWithdrawal` -> PAID) simply records it as withdrawn, since the
- * balance was already debited here.
+ * simply records it as withdrawn, since the balance was already debited
+ * here.
+ *
+ * The balance check and the decrement are a single conditional
+ * `updateMany` (`balance: { gte: amount }` in the WHERE clause), not a
+ * separate read-then-write — Postgres evaluates that condition against
+ * the row's live value at lock-acquisition time, so two concurrent
+ * requests against the same balance can never both succeed and drive it
+ * negative. Whichever loses sees `count === 0` and fails cleanly.
  */
-export async function requestWithdrawal(sellerId: string, input: WithdrawalRequestInput) {
+export async function requestWithdrawal(userId: string, sellerId: string, input: WithdrawalRequestInput) {
   if (input.amount <= 0) throw new ValidationError("Withdrawal amount must be greater than zero");
 
-  const sellerProfile = await db.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } });
+  const sellerProfile = await db.sellerProfile.findFirst({ where: { id: sellerId, userId } });
+  if (!sellerProfile) throw new NotFoundError("Seller profile");
 
   return db.$transaction(async (tx) => {
-    const wallet = await tx.wallet.findUnique({ where: { userId: sellerProfile.userId } });
-    if (!wallet || Number(wallet.balance) < input.amount) {
+    const claim = await tx.wallet.updateMany({
+      where: { userId: sellerProfile.userId, balance: { gte: input.amount } },
+      data: { balance: { decrement: input.amount } },
+    });
+    if (claim.count === 0) {
       throw new ValidationError("Withdrawal amount exceeds your available balance");
     }
-
-    await tx.wallet.update({ where: { userId: sellerProfile.userId }, data: { balance: { decrement: input.amount } } });
 
     const withdrawal = await tx.withdrawal.create({
       data: {
@@ -40,6 +50,14 @@ export async function requestWithdrawal(sellerId: string, input: WithdrawalReque
         accountName: input.accountName,
         status: "REQUESTED",
       },
+    });
+
+    await recordWithdrawalRequest(tx, {
+      amount: input.amount,
+      userId: sellerProfile.userId,
+      sellerId,
+      withdrawalId: withdrawal.id,
+      note: "Withdrawal requested, reserved from available balance",
     });
 
     await tx.auditLog.create({
@@ -70,11 +88,13 @@ export function listWithdrawalRequests(status?: "REQUESTED" | "PROCESSING" | "PA
 
 export async function markWithdrawalProcessing(adminId: string, withdrawalId: string) {
   return db.$transaction(async (tx) => {
-    const withdrawal = await tx.withdrawal.findUnique({ where: { id: withdrawalId } });
-    if (!withdrawal) throw new NotFoundError("Withdrawal");
-    if (withdrawal.status !== "REQUESTED") throw new ValidationError("Only requested withdrawals can move to processing");
+    const claim = await tx.withdrawal.updateMany({
+      where: { id: withdrawalId, status: "REQUESTED" },
+      data: { status: "PROCESSING" },
+    });
+    if (claim.count === 0) throw new ValidationError("Only requested withdrawals can move to processing");
 
-    const updated = await tx.withdrawal.update({ where: { id: withdrawalId }, data: { status: "PROCESSING" } });
+    const updated = await tx.withdrawal.findUniqueOrThrow({ where: { id: withdrawalId } });
 
     await tx.auditLog.create({
       data: { actorId: adminId, action: "WITHDRAWAL_PROCESSING", entityType: "Withdrawal", entityId: withdrawalId },
@@ -87,21 +107,27 @@ export async function markWithdrawalProcessing(adminId: string, withdrawalId: st
 /** Approves a withdrawal — the reservation made at request time becomes a permanent, recorded payout. */
 export async function approveWithdrawal(adminId: string, withdrawalId: string, reviewNotes?: string) {
   const result = await db.$transaction(async (tx) => {
-    const withdrawal = await tx.withdrawal.findUnique({ where: { id: withdrawalId } });
-    if (!withdrawal) throw new NotFoundError("Withdrawal");
-    if (withdrawal.status === "PAID") throw new ValidationError("Withdrawal already paid");
-    if (withdrawal.status === "REJECTED") throw new ValidationError("Cannot approve a rejected withdrawal");
-
-    const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: withdrawal.sellerId } });
-
-    const updated = await tx.withdrawal.update({
-      where: { id: withdrawalId },
+    const claim = await tx.withdrawal.updateMany({
+      where: { id: withdrawalId, status: { in: ["REQUESTED", "PROCESSING"] } },
       data: { status: "PAID", reviewedById: adminId, reviewNotes, processedAt: new Date() },
     });
+    if (claim.count === 0) throw new ValidationError("This withdrawal has already been paid or rejected");
+
+    const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: withdrawalId } });
+    const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: withdrawal.sellerId } });
 
     await tx.wallet.update({
       where: { userId: sellerProfile.userId },
       data: { withdrawnBalance: { increment: Number(withdrawal.amount) } },
+    });
+
+    await recordWithdrawalPaid(tx, {
+      amount: Number(withdrawal.amount),
+      userId: sellerProfile.userId,
+      sellerId: withdrawal.sellerId,
+      withdrawalId: withdrawal.id,
+      actorId: adminId,
+      note: "Withdrawal paid out",
     });
 
     await tx.auditLog.create({
@@ -114,7 +140,7 @@ export async function approveWithdrawal(adminId: string, withdrawalId: string, r
       },
     });
 
-    return { updated, sellerUserId: sellerProfile.userId };
+    return { updated: withdrawal, sellerUserId: sellerProfile.userId };
   });
 
   await createNotification(
@@ -130,22 +156,27 @@ export async function approveWithdrawal(adminId: string, withdrawalId: string, r
 /** Rejects a withdrawal and restores the reserved amount to the seller's available balance. */
 export async function rejectWithdrawal(adminId: string, withdrawalId: string, reviewNotes?: string) {
   const result = await db.$transaction(async (tx) => {
-    const withdrawal = await tx.withdrawal.findUnique({ where: { id: withdrawalId } });
-    if (!withdrawal) throw new NotFoundError("Withdrawal");
-    if (withdrawal.status === "PAID" || withdrawal.status === "REJECTED") {
-      throw new ValidationError(`Cannot reject a withdrawal in status ${withdrawal.status}`);
-    }
-
-    const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: withdrawal.sellerId } });
-
-    const updated = await tx.withdrawal.update({
-      where: { id: withdrawalId },
+    const claim = await tx.withdrawal.updateMany({
+      where: { id: withdrawalId, status: { in: ["REQUESTED", "PROCESSING"] } },
       data: { status: "REJECTED", reviewedById: adminId, reviewNotes, processedAt: new Date() },
     });
+    if (claim.count === 0) throw new ValidationError("This withdrawal has already been paid or rejected");
+
+    const withdrawal = await tx.withdrawal.findUniqueOrThrow({ where: { id: withdrawalId } });
+    const sellerProfile = await tx.sellerProfile.findUniqueOrThrow({ where: { id: withdrawal.sellerId } });
 
     await tx.wallet.update({
       where: { userId: sellerProfile.userId },
       data: { balance: { increment: Number(withdrawal.amount) } },
+    });
+
+    await recordAdjustment(tx, {
+      amount: Number(withdrawal.amount),
+      userId: sellerProfile.userId,
+      sellerId: withdrawal.sellerId,
+      withdrawalId: withdrawal.id,
+      actorId: adminId,
+      note: "Withdrawal rejected — reservation returned to available balance",
     });
 
     await tx.auditLog.create({
@@ -158,7 +189,7 @@ export async function rejectWithdrawal(adminId: string, withdrawalId: string, re
       },
     });
 
-    return { updated, sellerUserId: sellerProfile.userId };
+    return { updated: withdrawal, sellerUserId: sellerProfile.userId };
   });
 
   await createNotification(

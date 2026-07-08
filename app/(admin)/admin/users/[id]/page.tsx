@@ -20,6 +20,7 @@ import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { History, ShieldAlert } from "lucide-react";
 import { changeUserRoleAction, changeUserStatusAction, terminateSessionAction, forceLogoutAllAction } from "../actions";
 import { ForcePasswordResetForm } from "./force-password-reset-form";
@@ -62,21 +63,21 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-foreground">
-            {target.firstName} {target.lastName}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {target.email}
-            {target.phone ? ` · ${target.phone}` : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge tone="accent">{ROLE_LABELS[target.role]}</Badge>
-          <Badge tone={STATUS_TONE[target.status]}>{USER_STATUS_LABELS[target.status]}</Badge>
-        </div>
-      </div>
+      <PageHeader
+        breadcrumbs={[
+          { label: "Dashboard", href: ROUTES.admin.root },
+          { label: "Users", href: ROUTES.admin.users },
+          { label: `${target.firstName} ${target.lastName}` },
+        ]}
+        title={`${target.firstName} ${target.lastName}`}
+        description={`${target.email}${target.phone ? ` · ${target.phone}` : ""}`}
+        actions={
+          <>
+            <Badge tone="accent">{ROLE_LABELS[target.role]}</Badge>
+            <Badge tone={STATUS_TONE[target.status]}>{USER_STATUS_LABELS[target.status]}</Badge>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>

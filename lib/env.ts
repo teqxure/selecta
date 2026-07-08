@@ -49,6 +49,23 @@ const envSchema = z.object({
    */
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+
+  /**
+   * Hostname (no protocol) that fronts the admin console as its own
+   * subdomain, e.g. "admin.selectapick.store" — same deployment, same
+   * `/admin` route group; proxy.ts rewrites a bare path on this host to
+   * `/admin/...` invisibly. Unset in local dev, where `/admin` is just
+   * reached directly — the subdomain rewrite in proxy.ts is a no-op then.
+   */
+  NEXT_PUBLIC_ADMIN_HOST: z.string().min(1).optional(),
+  /**
+   * Cookie `Domain` attribute (e.g. ".selectapick.store") that lets the
+   * session cookie set on the main site also be sent to the admin
+   * subdomain, so logging in once works across both. Left unset in local
+   * dev and in any environment with no subdomain to share with — a
+   * host-only cookie (the default) is strictly safer, so this is opt-in.
+   */
+  COOKIE_DOMAIN: z.string().min(1).optional(),
 });
 
 function loadEnv() {

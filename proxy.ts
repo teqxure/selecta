@@ -1,13 +1,38 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createSessionToken, verifySessionTokenDetailed } from "@/lib/auth/session";
+import { createSessionToken, verifySessionTokenDetailed, cookieOptions } from "@/lib/auth/session";
 import { SESSION_COOKIE_NAME, SESSION_REFRESH_THRESHOLD_SECONDS } from "@/lib/constants/app";
 import { ROUTE_ROLE_ACCESS, Role } from "@/lib/constants/roles";
 import { ROUTES, AUTH_REQUIRED_PREFIXES } from "@/lib/constants/routes";
 import { applySecurityHeaders } from "@/lib/security/headers";
+import { env } from "@/lib/env";
 
 function matchPrefix(pathname: string, prefixes: readonly string[]) {
   return prefixes.find((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+/** Still served as-is even on the admin subdomain — the login/register forms, which aren't under `/admin`. (API routes and Next's own assets never reach here — see `config.matcher` below.) */
+const ADMIN_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register"];
+
+/**
+ * `NEXT_PUBLIC_ADMIN_HOST` (e.g. "admin.selectapick.store") is a cosmetic
+ * front door onto this same deployment's `/admin` route group, not a
+ * separate app. A bare path on that host (`/users`) is rewritten to
+ * `/admin/users` invisibly; a path that already starts with `/admin`
+ * (e.g. from an existing `<Link href="/admin/...">`) is left alone, since
+ * it's already pointing at the right place.
+ */
+function rewriteForAdminHost(request: NextRequest): string {
+  const pathname = request.nextUrl.pathname;
+  if (!env.NEXT_PUBLIC_ADMIN_HOST) return pathname;
+
+  const host = request.headers.get("host") ?? "";
+  const isAdminHost = host === env.NEXT_PUBLIC_ADMIN_HOST || host.startsWith(`${env.NEXT_PUBLIC_ADMIN_HOST}:`);
+  if (!isAdminHost) return pathname;
+  if (pathname.startsWith("/admin")) return pathname;
+  if (matchPrefix(pathname, ADMIN_HOST_PASSTHROUGH_PREFIXES)) return pathname;
+
+  return pathname === "/" ? "/admin" : `/admin${pathname}`;
 }
 
 /**
@@ -17,10 +42,15 @@ function matchPrefix(pathname: string, prefixes: readonly string[]) {
  * Action/Route Handler via `requireRole`/`requireAuth` in lib/auth/rbac.ts.
  */
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next();
+  const rewrittenPathname = rewriteForAdminHost(request);
+  const isRewritten = rewrittenPathname !== request.nextUrl.pathname;
+
+  const response = isRewritten
+    ? NextResponse.rewrite(new URL(`${rewrittenPathname}${request.nextUrl.search}`, request.url))
+    : NextResponse.next();
   applySecurityHeaders(response.headers);
 
-  const pathname = request.nextUrl.pathname;
+  const pathname = rewrittenPathname;
   const roleRestrictedPrefix = matchPrefix(pathname, Object.keys(ROUTE_ROLE_ACCESS));
   const requiresAnyAuth = matchPrefix(pathname, AUTH_REQUIRED_PREFIXES);
 
@@ -54,27 +84,12 @@ export async function proxy(request: NextRequest) {
       { userId: session.userId, role: session.role, sessionId: session.sessionId },
       originalDuration,
     );
-    response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: originalDuration,
-    });
+    response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, { ...cookieOptions, maxAge: originalDuration });
   }
 
   return response;
 }
 
 export const config = {
-  matcher: [
-    "/seller/:path*",
-    "/admin/:path*",
-    "/profile/:path*",
-    "/orders/:path*",
-    "/saved/:path*",
-    "/cart/:path*",
-    "/notifications/:path*",
-    "/messages/:path*",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

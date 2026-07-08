@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth/rbac";
 import { Role, ROLE_LABELS, USER_STATUS_LABELS, UserStatus } from "@/lib/constants/roles";
 import { listUsers, type ListUsersFilters } from "@/services/users/user.service";
 import { ROUTES } from "@/lib/constants/routes";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -50,16 +51,15 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Users ({totalCount})</h1>
-        {canManageRoles && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            As Super Admin, you can change any account&apos;s role here, including granting or removing Super Admin
-            itself. You can&apos;t change your own role from this page, and the last active Super Admin can&apos;t be
-            demoted.
-          </p>
-        )}
-      </div>
+      <PageHeader
+        breadcrumbs={[{ label: "Dashboard", href: ROUTES.admin.root }, { label: "Users" }]}
+        title={`Users (${totalCount})`}
+        description={
+          canManageRoles
+            ? "As Super Admin, you can change any account's role here, including granting or removing Super Admin itself. You can't change your own role from this page, and the last active Super Admin can't be demoted."
+            : undefined
+        }
+      />
 
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 p-4">
@@ -128,7 +128,10 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
               {users.map((user) => (
                 <tr key={user.id} className="border-b border-border last:border-0">
                   <td className="px-4 py-3 text-secondary-foreground">
-                    <Link href={ROUTES.admin.user(user.id)} className="hover:underline">
+                    <Link href={ROUTES.admin.user(user.id)} className="flex items-center gap-2.5 hover:underline">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
+                        {user.firstName.charAt(0).toUpperCase()}
+                      </span>
                       {user.firstName} {user.lastName}
                     </Link>
                   </td>
@@ -153,7 +156,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                         </Button>
                       </form>
                     ) : (
-                      ROLE_LABELS[user.role]
+                      <Badge tone="neutral">{ROLE_LABELS[user.role]}</Badge>
                     )}
                   </td>
                   <td className="px-4 py-3">

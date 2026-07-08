@@ -53,11 +53,21 @@ export async function verifySessionTokenDetailed(token: string): Promise<Session
   }
 }
 
-const cookieOptions = {
+/**
+ * `domain` is omitted (host-only cookie) unless `COOKIE_DOMAIN` is set —
+ * that's the opt-in for sharing one login between the main site and the
+ * admin subdomain (see lib/env.ts). A cookie set with a `domain` must also
+ * be *cleared* with that same `domain`, or the browser treats it as a
+ * different cookie and leaves the original behind — both `setSessionCookie`
+ * and `clearSessionCookie` read from this one shared object so they can
+ * never drift apart.
+ */
+export const cookieOptions = {
   httpOnly: true,
   secure: env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
+  ...(env.COOKIE_DOMAIN && { domain: env.COOKIE_DOMAIN }),
 };
 
 /** Call only from a Server Action or Route Handler. */
@@ -71,7 +81,7 @@ export async function setSessionCookie(payload: SessionPayload, rememberMe = fal
 /** Call only from a Server Action or Route Handler. */
 export async function clearSessionCookie() {
   const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE_NAME);
+  cookieStore.delete({ name: SESSION_COOKIE_NAME, ...cookieOptions });
 }
 
 /** Safe to call from Server Components (read-only). */

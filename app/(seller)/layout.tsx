@@ -1,20 +1,36 @@
 import type { ReactNode } from "react";
 import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3 } from "lucide-react";
-import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
+import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
 import { currentUser } from "@/lib/auth/current-user";
 import { findSellerProfileByUserId } from "@/services/sellers/seller.service";
-import { Role } from "@/lib/constants/roles";
+import { Role, ROLE_LABELS } from "@/lib/constants/roles";
+import { env } from "@/lib/env";
 
-const SELLER_NAV = [
-  { label: "Dashboard", href: ROUTES.seller.dashboard, icon: LayoutGrid },
-  { label: "Products", href: ROUTES.seller.products, icon: Package },
-  { label: "Orders", href: ROUTES.seller.orders, icon: ShoppingCart },
-  { label: "Customers", href: ROUTES.seller.customers, icon: Users },
-  { label: "Messages", href: ROUTES.seller.messages, icon: MessageCircle },
-  { label: "Analytics", href: ROUTES.seller.analytics, icon: BarChart3 },
-  { label: "Wallet", href: ROUTES.seller.wallet, icon: Wallet },
-  { label: "Store settings", href: ROUTES.seller.settings, icon: Store },
+const iconProps = { className: "h-4 w-4", strokeWidth: 2 } as const;
+
+const SELLER_NAV_GROUPS: DashboardNavGroup[] = [
+  { items: [{ label: "Dashboard", href: ROUTES.seller.dashboard, icon: <LayoutGrid {...iconProps} /> }] },
+  {
+    label: "Selling",
+    items: [
+      { label: "Products", href: ROUTES.seller.products, icon: <Package {...iconProps} /> },
+      { label: "Orders", href: ROUTES.seller.orders, icon: <ShoppingCart {...iconProps} /> },
+      { label: "Customers", href: ROUTES.seller.customers, icon: <Users {...iconProps} /> },
+      { label: "Messages", href: ROUTES.seller.messages, icon: <MessageCircle {...iconProps} /> },
+    ],
+  },
+  {
+    label: "Growth & finance",
+    items: [
+      { label: "Analytics", href: ROUTES.seller.analytics, icon: <BarChart3 {...iconProps} /> },
+      { label: "Wallet", href: ROUTES.seller.wallet, icon: <Wallet {...iconProps} /> },
+    ],
+  },
+  {
+    label: "Store",
+    items: [{ label: "Store settings", href: ROUTES.seller.settings, icon: <Store {...iconProps} /> }],
+  },
 ];
 
 export default async function SellerLayout({ children }: { children: ReactNode }) {
@@ -28,9 +44,16 @@ export default async function SellerLayout({ children }: { children: ReactNode }
   }
 
   return (
-    <div className="flex min-h-full flex-1">
-      <DashboardSidebar title="Seller" items={SELLER_NAV} />
-      <main className="flex-1 p-8">{children}</main>
+    <div className="flex min-h-full flex-1 flex-col md:flex-row">
+      {user && (
+        <DashboardSidebar
+          subtitle="Seller Studio"
+          groups={SELLER_NAV_GROUPS}
+          user={{ firstName: user.firstName, lastName: user.lastName, email: user.email, roleLabel: ROLE_LABELS[user.role] }}
+          marketplaceUrl={env.NEXT_PUBLIC_APP_URL}
+        />
+      )}
+      <main className="flex-1 p-5 md:p-8">{children}</main>
     </div>
   );
 }

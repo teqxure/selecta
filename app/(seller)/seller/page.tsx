@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Wallet, ShoppingCart, Package, Eye, MessageCircle, TrendingUp } from "lucide-react";
+import { Wallet, ShoppingCart, Package, Eye, MessageCircle, TrendingUp, PlusCircle, Banknote } from "lucide-react";
 import { requireAuth } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { ROUTES } from "@/lib/constants/routes";
@@ -15,10 +15,12 @@ import {
 import { getProductStatusCounts } from "@/services/products/product.service";
 import { getPendingOrdersCountForSeller, listOrdersForSeller } from "@/services/orders/order.service";
 import { getUnreadCountForSeller } from "@/services/messaging/conversation.service";
+import { getSellerBalances } from "@/services/payments/payment.service";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 
 export default async function SellerDashboardPage() {
@@ -37,6 +39,7 @@ export default async function SellerDashboardPage() {
     trendingInsight,
     topProduct,
     recentOrders,
+    balances,
   ] = await Promise.all([
     getTodayRevenue(profile.id),
     getPendingOrdersCountForSeller(profile.id),
@@ -47,6 +50,7 @@ export default async function SellerDashboardPage() {
     getTrendingInsight(profile.id),
     getMostViewedProducts(profile.id, 1),
     listOrdersForSeller(profile.id),
+    getSellerBalances(profile.id),
   ]);
 
   const format = (value: number) =>
@@ -74,6 +78,27 @@ export default async function SellerDashboardPage() {
         <Badge tone={STATUS_TONE[profile.verificationStatus]}>{profile.verificationStatus}</Badge>
       </div>
 
+      <div className="flex flex-wrap gap-3">
+        <Link href={ROUTES.seller.newProduct}>
+          <Button variant="accent" size="sm">
+            <PlusCircle className="h-4 w-4" strokeWidth={2} />
+            Add product
+          </Button>
+        </Link>
+        <Link href={ROUTES.seller.orders}>
+          <Button variant="outline" size="sm">
+            <ShoppingCart className="h-4 w-4" strokeWidth={2} />
+            View orders
+          </Button>
+        </Link>
+        <Link href={ROUTES.seller.withdrawals}>
+          <Button variant="outline" size="sm">
+            <Banknote className="h-4 w-4" strokeWidth={2} />
+            Request withdrawal
+          </Button>
+        </Link>
+      </div>
+
       {insights.length > 0 && (
         <Card className="border-accent/30 bg-accent/5">
           <CardContent className="flex flex-col gap-1 p-4 text-sm text-foreground">
@@ -84,8 +109,9 @@ export default async function SellerDashboardPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Today's revenue" icon={Wallet} value={format(todayRevenue)} />
+        <StatCard label="Wallet balance" icon={Banknote} value={format(balances.available)} />
         <StatCard label="Total sales" icon={TrendingUp} value={String(profile.totalSales)} />
         <StatCard label="Pending orders" icon={ShoppingCart} value={String(pendingOrders)} />
         <StatCard label="Active listings" icon={Package} value={String(statusCounts.active)} />

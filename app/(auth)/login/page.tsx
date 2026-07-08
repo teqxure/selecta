@@ -1,42 +1,21 @@
-"use client";
+import { isGoogleAuthConfigured } from "@/lib/auth/google";
+import { LoginForm } from "./login-form";
 
-import { useActionState } from "react";
-import Link from "next/link";
-import { loginAction, type AuthActionState } from "@/app/(auth)/actions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
-import { SubmitButton } from "@/components/forms/SubmitButton";
-import { FormError } from "@/components/forms/FormError";
-import { ROUTES } from "@/lib/constants/routes";
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  google_denied: "Google sign-in was cancelled.",
+  google_failed: "Google sign-in failed. Please try again or use your email and password.",
+  google_not_configured: "Google sign-in is not available right now.",
+  account_inactive: "Your account is inactive. Please contact support to reactivate it.",
+  account_suspended: "Your account has been suspended. Please contact support.",
+  account_banned: "Your account has been banned.",
+};
 
-const initialState: AuthActionState = {};
+interface LoginPageProps {
+  searchParams: Promise<{ error?: string }>;
+}
 
-export default function LoginPage() {
-  const [state, formAction] = useActionState(loginAction, initialState);
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { error } = await searchParams;
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Log in</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form action={formAction} className="flex flex-col gap-4">
-          <Input name="email" type="email" label="Email" required />
-          <Input name="password" type="password" label="Password" required />
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input type="checkbox" name="rememberMe" className="h-4 w-4 rounded border-border accent-accent" />
-            Remember me for 30 days
-          </label>
-          <FormError message={state.error} />
-          <SubmitButton className="w-full">Log in</SubmitButton>
-        </form>
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          New to Selecta?{" "}
-          <Link href={ROUTES.register} className="font-medium text-accent">
-            Create an account
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
-  );
+  return <LoginForm googleEnabled={isGoogleAuthConfigured()} oauthError={error ? OAUTH_ERROR_MESSAGES[error] : undefined} />;
 }

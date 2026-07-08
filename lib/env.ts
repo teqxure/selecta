@@ -40,6 +40,15 @@ const envSchema = z.object({
   R2_PUBLIC_URL: z.url().optional(),
 
   NEXT_PUBLIC_APP_URL: z.url().default("http://localhost:3000"),
+
+  /**
+   * Google OAuth 2.0 (Sign in with Google) — from a Google Cloud Console
+   * project's OAuth client (APIs & Services -> Credentials). Optional
+   * because the app must run before these are configured; the "Continue
+   * with Google" buttons are hidden when unset (see lib/auth/google.ts).
+   */
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
 });
 
 function loadEnv() {

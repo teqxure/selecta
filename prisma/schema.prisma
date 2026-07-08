@@ -191,6 +191,11 @@ model User {
   email           String     @unique
   phone           String?    @unique
   passwordHash    String?    @map("password_hash")
+  /// Google's stable account identifier ("sub" claim) — set once a user
+  /// signs in with Google, whether that creates a brand-new account or
+  /// links to an existing email/password one. Never null for a
+  /// Google-only account (which also has passwordHash: null).
+  googleId        String?    @unique @map("google_id")
   firstName       String     @map("first_name")
   lastName        String     @map("last_name")
   avatarUrl       String?    @map("avatar_url")

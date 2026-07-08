@@ -7,6 +7,7 @@ import { sanitizeOptionalText } from "@/lib/security/sanitize";
 import { PAGINATION } from "@/lib/constants/app";
 import type { RegisterInput } from "@/lib/validators/auth";
 import type { UpdateBuyerProfileInput } from "@/lib/validators/profile";
+import type { GoogleProfile, GoogleRole } from "@/lib/auth/google";
 import type { PaginatedResult } from "@/types";
 
 export async function createUser(input: RegisterInput) {
@@ -61,6 +62,61 @@ export async function getUserById(id: string) {
 
 export function getUserByEmail(email: string) {
   return db.user.findUnique({ where: { email } });
+}
+
+/**
+ * Google sign-in entry point. Resolution order: an existing Google-linked
+ * account wins outright; otherwise a matching email links Google onto that
+ * account (password login keeps working alongside it); otherwise a brand
+ * new account is created with the role the user picked before starting the
+ * OAuth redirect. Email is trusted as verified here because it comes from
+ * Google's signed ID token, not user input.
+ */
+export async function findOrCreateGoogleUser(profile: GoogleProfile, intendedRole: GoogleRole) {
+  const existingByGoogleId = await db.user.findUnique({ where: { googleId: profile.googleId } });
+  if (existingByGoogleId) return existingByGoogleId;
+
+  const existingByEmail = await db.user.findUnique({ where: { email: profile.email } });
+  if (existingByEmail) {
+    return db.user.update({
+      where: { id: existingByEmail.id },
+      data: {
+        googleId: profile.googleId,
+        emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(),
+        avatarUrl: existingByEmail.avatarUrl ?? profile.avatarUrl,
+      },
+    });
+  }
+
+  return db.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: profile.email,
+        googleId: profile.googleId,
+        firstName: profile.firstName || "Selecta",
+        lastName: profile.lastName || "Member",
+        avatarUrl: profile.avatarUrl,
+        role: intendedRole,
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    if (intendedRole === Role.SELLER) {
+      await tx.sellerProfile.create({
+        data: {
+          userId: user.id,
+          businessName: `${user.firstName} ${user.lastName}`,
+          onboardingStep: 1,
+        },
+      });
+    }
+
+    await tx.userActivity.create({
+      data: { userId: user.id, action: "ACCOUNT_CREATED", metadata: { role: intendedRole, via: "google" } },
+    });
+
+    return user;
+  });
 }
 
 export async function updateBuyerProfile(userId: string, input: UpdateBuyerProfileInput) {

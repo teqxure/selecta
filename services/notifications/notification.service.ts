@@ -14,9 +14,9 @@ export async function createNotification(
   });
 }
 
-export function listNotifications(userId: string) {
+export function listNotifications(userId: string, type?: NotificationType) {
   return db.notification.findMany({
-    where: { userId },
+    where: { userId, ...(type && { type }) },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -25,6 +25,11 @@ export function listNotifications(userId: string) {
 /** Scoped to `{ id, userId }` so marking someone else's notification read by guessing an id is a no-op. */
 export async function markAsRead(id: string, userId: string) {
   await db.notification.updateMany({ where: { id, userId }, data: { isRead: true } });
+}
+
+/** Scoped to `{ id, userId }` — same ownership-is-the-query pattern as markAsRead, so deleting someone else's row by guessing an id is a no-op, not a leak. */
+export async function deleteNotification(id: string, userId: string) {
+  await db.notification.deleteMany({ where: { id, userId } });
 }
 
 export async function markAllAsRead(userId: string) {

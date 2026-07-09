@@ -22,6 +22,8 @@ export interface SystemSettingsInput {
   requireProductApproval?: boolean;
   requireSellerVerification?: boolean;
   marketplaceStatus?: MarketplaceStatus;
+  notificationSenderName?: string;
+  notificationSenderEmail?: string | null;
 }
 
 export async function updateSystemSettings(adminId: string, data: SystemSettingsInput) {

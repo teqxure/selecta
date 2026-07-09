@@ -16,6 +16,7 @@ import {
   LineChart,
   ClipboardList,
   UserCog,
+  Bell,
 } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
@@ -66,6 +67,7 @@ const ADMIN_NAV_GROUPS = [
     items: [
       { label: "Admins", href: ROUTES.admin.admins, icon: UserCog, permission: "SUPER_ADMIN_ONLY" },
       { label: "Integrations", href: ROUTES.admin.integrations, icon: Plug, permission: "SUPER_ADMIN_ONLY" },
+      { label: "Notifications", href: ROUTES.admin.notifications, icon: Bell, permission: "SUPER_ADMIN_ONLY" },
       { label: "Feature flags", href: ROUTES.admin.featureFlags, icon: Flag, permission: "SUPER_ADMIN_ONLY" },
       { label: "Settings", href: ROUTES.admin.settings, icon: Settings, permission: "SUPER_ADMIN_ONLY" },
     ],

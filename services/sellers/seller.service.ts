@@ -4,6 +4,8 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import type { Prisma } from "@/generated/prisma/client";
 import { sanitizeOptionalText, sanitizeText } from "@/lib/security/sanitize";
 import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
+import { alertAdmins } from "@/services/notifications/admin-alerts.service";
 import { PAGINATION } from "@/lib/constants/app";
 import type { PersonalInfoInput, StoreSetupInput, VerificationSubmissionInput } from "@/lib/validators/onboarding";
 import type { UpdateSellerSettingsInput } from "@/lib/validators/profile";
@@ -139,6 +141,13 @@ export async function submitVerification(
     });
 
     return profile;
+  }).then(async (profile) => {
+    await alertAdmins(
+      "New seller verification submitted",
+      `${profile.businessName} submitted verification documents for review.`,
+      { actionUrl: "/admin/verification-queue", metadata: { sellerProfileId } },
+    );
+    return profile;
   });
 }
 
@@ -245,13 +254,25 @@ async function reviewVerification(
 
     return profile;
   }).then(async (profile) => {
-    await createNotification(
-      profile.userId,
-      "SYSTEM",
-      status === "VERIFIED" ? "Your store is verified!" : "Verification needs another look",
+    const storeName = profile.storeName ?? profile.businessName;
+    await notify(
       status === "VERIFIED"
-        ? "Congratulations — your store has been verified. You can now list products on Selecta."
-        : `Your verification wasn't approved${notes ? `: ${notes}` : "."} Please resubmit your documents.`,
+        ? {
+            event: "SELLER_APPROVED",
+            userId: profile.userId,
+            title: "Your store is verified!",
+            message: "Congratulations — your store has been verified. You can now list products on Selecta.",
+            actionUrl: "/seller",
+            emailVariables: { storeName },
+          }
+        : {
+            event: "SELLER_REJECTED",
+            userId: profile.userId,
+            title: "Verification needs another look",
+            message: `Your verification wasn't approved${notes ? `: ${notes}` : "."} Please resubmit your documents.`,
+            actionUrl: "/seller/onboarding/verification",
+            emailVariables: { storeName },
+          },
     );
     return profile;
   });

@@ -232,17 +232,19 @@ model User {
   conversations   Conversation[]  @relation("BuyerConversations")
   messages        Message[]
 
-  transactionsAsBuyer    Transaction[]        @relation("BuyerTransactions")
+  transactionsAsBuyer    Transaction[]          @relation("BuyerTransactions")
   orderStatusChanges     OrderStatusHistory[]
-  withdrawalReviews      Withdrawal[]         @relation("WithdrawalReviewer")
-  disputesAsBuyer        Dispute[]            @relation("BuyerDisputes")
-  disputesResolved       Dispute[]            @relation("ResolvedDisputes")
+  withdrawalReviews      Withdrawal[]           @relation("WithdrawalReviewer")
+  disputesAsBuyer        Dispute[]              @relation("BuyerDisputes")
+  disputesResolved       Dispute[]              @relation("ResolvedDisputes")
   systemSettingsUpdated  SystemSettings[]
   integrationSettingsSet IntegrationSetting[]
   commissionRulesCreated CommissionRule[]
   featureFlagsUpdated    FeatureFlag[]
   ledgerEntries          LedgerEntry[]
-  ledgerEntriesRecorded  LedgerEntry[]        @relation("LedgerEntryActor")
+  ledgerEntriesRecorded  LedgerEntry[]          @relation("LedgerEntryActor")
+  emailTemplatesUpdated  EmailTemplate[]
+  notificationDeliveries NotificationDelivery[]
 
   @@index([role])
   @@index([status])
@@ -884,6 +886,70 @@ model Notification {
   @@map("notifications")
 }
 
+/// One row per known event key ("order_paid", "seller_approved", etc.) —
+/// the Super Admin-editable copy behind every templated email the
+/// notification engine sends. `bodyHtml` and `subject` may contain
+/// `{{variable}}` placeholders (see services/notifications/template.ts);
+/// unknown placeholders are left as-is rather than throwing, so a typo'd
+/// variable degrades to visible-but-harmless instead of a broken send.
+model EmailTemplate {
+  key         String   @id
+  label       String
+  subject     String
+  bodyHtml    String   @map("body_html")
+  isEnabled   Boolean  @default(true) @map("is_enabled")
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("email_templates")
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// Every attempted send through any channel — the audit trail
+/// `services/notifications/notify.service.ts` needs to prove an event
+/// actually reached (or failed to reach) someone, and the basis for
+/// future retry logic. Deliberately separate from `Notification` (the
+/// in-app inbox row): one event can produce a `Notification` with zero,
+/// one, or several `NotificationDelivery` rows (e.g. email today, SMS
+/// later) — they track different things and fail independently.
+model NotificationDelivery {
+  id            String                     @id @default(cuid())
+  userId        String?                    @map("user_id")
+  channel       NotificationChannel
+  status        NotificationDeliveryStatus @default(PENDING)
+  /// Integration provider that handled this attempt (e.g. "resend"), null
+  /// until a provider is actually resolved for the send.
+  provider      String?
+  templateKey   String?                    @map("template_key")
+  /// Email address or phone number this attempt targeted — kept even if
+  /// the user record is later deleted, since it's the delivery record.
+  recipient     String
+  attemptCount  Int                        @default(1) @map("attempt_count")
+  failureReason String?                    @map("failure_reason")
+  sentAt        DateTime?                  @map("sent_at")
+  createdAt     DateTime                   @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([userId])
+  @@map("notification_deliveries")
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   actorId    String?  @map("actor_id")
@@ -946,6 +1012,12 @@ model SystemSettings {
   requireProductApproval    Boolean           @default(true) @map("require_product_approval")
   requireSellerVerification Boolean           @default(true) @map("require_seller_verification")
   marketplaceStatus         MarketplaceStatus @default(OPEN) @map("marketplace_status")
+  /// "From" identity for every templated email the notification engine
+  /// sends — e.g. "Selecta" <notifications@selectapick.store>. Blank
+  /// sender email falls back to a hardcoded default at send time rather
+  /// than failing the send outright.
+  notificationSenderName    String            @default("Selecta") @map("notification_sender_name")
+  notificationSenderEmail   String?           @map("notification_sender_email")
   updatedById               String?           @map("updated_by_id")
   updatedAt                 DateTime          @updatedAt @map("updated_at")
 

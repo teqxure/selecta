@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
-import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
 import { revokeAllSessionsForUser } from "@/services/users/session.service";
 import { assertActorMayManageTarget, assertLastActiveSuperAdminSurvives } from "@/services/users/account-guards";
 import { ValidationError } from "@/lib/errors";
@@ -66,19 +66,26 @@ export async function changeUserStatus(actorId: string, targetUserId: string, ne
   }
 
   const copy = STATUS_NOTIFICATION_COPY[newStatus];
-  await createNotification(targetUserId, "SYSTEM", copy.title, copy.message, { fromStatus: previousStatus, toStatus: newStatus });
+  await notify({
+    event: "SECURITY_ALERT",
+    userId: targetUserId,
+    title: copy.title,
+    message: copy.message,
+    metadata: { fromStatus: previousStatus, toStatus: newStatus },
+    emailVariables: { message: copy.message },
+  });
 
   return updated;
 }
 
 /**
  * Sets a new password an admin/support agent relays to the account holder
- * out-of-band (no email infrastructure is wired yet to send a reset link —
- * see the Phase 1 audit). Google-only accounts (no `passwordHash`) can't
- * use this; they sign in exclusively via Google. Revokes every existing
- * session, same reasoning as a status change: a credential reset without a
- * forced logout would leave already-open sessions valid on the old trust
- * basis.
+ * out-of-band (there's still no self-service "forgot password" flow that
+ * emails a reset link — this is the only path today). Google-only
+ * accounts (no `passwordHash`) can't use this; they sign in exclusively
+ * via Google. Revokes every existing session, same reasoning as a status
+ * change: a credential reset without a forced logout would leave
+ * already-open sessions valid on the old trust basis.
  */
 export async function forcePasswordReset(actorId: string, targetUserId: string, newPassword: string, ipAddress?: string) {
   await assertActorMayManageTarget(actorId, targetUserId);
@@ -99,10 +106,12 @@ export async function forcePasswordReset(actorId: string, targetUserId: string, 
 
   await revokeAllSessionsForUser(actorId, targetUserId, ipAddress);
 
-  await createNotification(
-    targetUserId,
-    "SYSTEM",
-    "Your password was reset",
-    "Selecta support reset your password. If you didn't request this, contact support immediately.",
-  );
+  const message = "Selecta support reset your password. If you didn't request this, contact support immediately.";
+  await notify({
+    event: "SECURITY_ALERT",
+    userId: targetUserId,
+    title: "Your password was reset",
+    message,
+    emailVariables: { message },
+  });
 }

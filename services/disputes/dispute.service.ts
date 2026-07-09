@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
+import { alertAdmins } from "@/services/notifications/admin-alerts.service";
 import { releaseTransaction, refundTransaction } from "@/services/payments/payment.service";
 import { transitionOrderStatus } from "@/services/orders/order-state-machine";
 import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
@@ -61,11 +62,20 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
   });
 
   const sellerProfile = await db.sellerProfile.findUniqueOrThrow({ where: { id: input.sellerId } });
-  await createNotification(
-    sellerProfile.userId,
-    "ORDER",
-    "A dispute was opened",
-    `A buyer opened a dispute on order #${order.id.slice(-8)} — Selecta will review it shortly.`,
+  const orderRef = order.id.slice(-8);
+  await notify({
+    event: "DISPUTE_OPENED",
+    userId: sellerProfile.userId,
+    title: "A dispute was opened",
+    message: `A buyer opened a dispute on order #${orderRef} — Selecta will review it shortly.`,
+    actionUrl: `/seller/orders/${order.id}`,
+    emailVariables: { orderId: order.id, message: `A dispute was opened on order #${orderRef}.` },
+  });
+
+  await alertAdmins(
+    "New dispute opened",
+    `A dispute (${input.type}) was opened on order #${orderRef} against ${sellerProfile.businessName}.`,
+    { actionUrl: `/admin/disputes`, metadata: { disputeId: dispute.id, orderId: order.id } },
   );
 
   return dispute;
@@ -244,8 +254,22 @@ async function finalizeDisputeResolution(
   const sellerProfile = await db.sellerProfile.findUniqueOrThrow({ where: { id: result.sellerId } });
   const message = `Dispute on order #${result.orderId.slice(-8)} resolved: ${resolution}`;
   await Promise.all([
-    createNotification(result.buyerId, "ORDER", "Dispute resolved", message),
-    createNotification(sellerProfile.userId, "ORDER", "Dispute resolved", message),
+    notify({
+      event: "DISPUTE_RESOLVED",
+      userId: result.buyerId,
+      title: "Dispute resolved",
+      message,
+      actionUrl: `/orders/${result.orderId}`,
+      emailVariables: { orderId: result.orderId, message },
+    }),
+    notify({
+      event: "DISPUTE_RESOLVED",
+      userId: sellerProfile.userId,
+      title: "Dispute resolved",
+      message,
+      actionUrl: `/seller/orders/${result.orderId}`,
+      emailVariables: { orderId: result.orderId, message },
+    }),
   ]);
 
   return result;

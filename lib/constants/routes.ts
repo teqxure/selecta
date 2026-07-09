@@ -62,6 +62,7 @@ export const ROUTES = {
     disputes: "/admin/disputes",
     dispute: (id: string) => `/admin/disputes/${id}`,
     finance: "/admin/finance",
+    notifications: "/admin/notifications",
   },
   notifications: "/notifications",
 } as const;

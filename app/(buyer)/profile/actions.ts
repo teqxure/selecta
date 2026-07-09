@@ -6,6 +6,7 @@ import { requireActiveUser } from "@/lib/auth/rbac";
 import { updateBuyerProfileSchema, addressSchema } from "@/lib/validators/profile";
 import { updateBuyerProfile } from "@/services/users/user.service";
 import { createAddress, deleteAddress, setDefaultAddress } from "@/services/users/address.service";
+import { updateNotificationPreferences } from "@/services/notifications/preferences.service";
 import { isAppError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
 
@@ -63,5 +64,17 @@ export async function setDefaultAddressAction(formData: FormData) {
   } catch (error) {
     if (!isAppError(error)) throw error;
   }
+  revalidatePath(ROUTES.profile);
+}
+
+export async function updateNotificationPreferencesAction(formData: FormData) {
+  const user = await requireActiveUser();
+
+  await updateNotificationPreferences(user.id, {
+    orderUpdates: formData.get("orderUpdates") === "on",
+    sellerUpdates: formData.get("sellerUpdates") === "on",
+    marketing: formData.get("marketing") === "on",
+  });
+
   revalidatePath(ROUTES.profile);
 }

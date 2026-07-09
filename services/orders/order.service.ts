@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
 import { releaseOrderTransactions } from "@/services/payments/payment.service";
 import { syncDeliveryStatus } from "@/services/logistics/delivery.service";
 import { transitionOrderStatus } from "@/services/orders/order-state-machine";
@@ -50,11 +50,11 @@ export async function createOrder(buyerId: string, lines: OrderLineInput[], ship
     });
   });
 
-  const itemsBySeller = new Map<string, { title: string }[]>();
+  const itemsBySeller = new Map<string, { title: string; storeName: string }[]>();
   for (const item of order.items) {
     const sellerUserId = item.product.seller.userId;
     const entry = itemsBySeller.get(sellerUserId) ?? [];
-    entry.push({ title: item.product.title });
+    entry.push({ title: item.product.title, storeName: item.product.seller.storeName ?? item.product.seller.businessName });
     itemsBySeller.set(sellerUserId, entry);
   }
 
@@ -64,7 +64,14 @@ export async function createOrder(buyerId: string, lines: OrderLineInput[], ship
         items.length === 1
           ? `"${items[0].title}" just sold — check your orders for pickup details.`
           : `${items.length} items just sold, including "${items[0].title}" — check your orders for pickup details.`;
-      return createNotification(sellerUserId, "ORDER", "You received an order", message);
+      return notify({
+        event: "SELLER_NEW_ORDER",
+        userId: sellerUserId,
+        title: "You received an order",
+        message,
+        actionUrl: `/seller/orders/${order.id}`,
+        emailVariables: { orderId: order.id, storeName: items[0].storeName },
+      });
     }),
   );
 

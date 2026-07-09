@@ -1,8 +1,13 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
+import { alertAdmins, LARGE_WITHDRAWAL_THRESHOLD_NGN } from "@/services/notifications/admin-alerts.service";
 import { recordWithdrawalRequest, recordWithdrawalPaid, recordAdjustment } from "@/services/finance/ledger.service";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+
+function formatNaira(amount: number) {
+  return `₦${amount.toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
+}
 
 export interface WithdrawalRequestInput {
   amount: number;
@@ -69,6 +74,25 @@ export async function requestWithdrawal(userId: string, sellerId: string, input:
         metadata: { amount: input.amount } as object,
       },
     });
+
+    return withdrawal;
+  }).then(async (withdrawal) => {
+    await notify({
+      event: "WITHDRAWAL_REQUESTED",
+      userId: sellerProfile.userId,
+      title: "Withdrawal requested",
+      message: `Your withdrawal request of ${formatNaira(input.amount)} has been submitted for review.`,
+      actionUrl: "/seller/withdrawals",
+      emailVariables: { amount: formatNaira(input.amount), status: "requested" },
+    });
+
+    if (input.amount >= LARGE_WITHDRAWAL_THRESHOLD_NGN) {
+      await alertAdmins(
+        "Large withdrawal requested",
+        `${sellerProfile.businessName} requested a withdrawal of ${formatNaira(input.amount)}.`,
+        { actionUrl: "/admin/withdrawals", metadata: { withdrawalId: withdrawal.id, amount: input.amount } },
+      );
+    }
 
     return withdrawal;
   });
@@ -143,12 +167,15 @@ export async function approveWithdrawal(adminId: string, withdrawalId: string, r
     return { updated: withdrawal, sellerUserId: sellerProfile.userId };
   });
 
-  await createNotification(
-    result.sellerUserId,
-    "PAYMENT",
-    "Withdrawal paid",
-    `₦${Number(result.updated.amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })} has been sent to your bank account.`,
-  );
+  const amount = formatNaira(Number(result.updated.amount));
+  await notify({
+    event: "WITHDRAWAL_APPROVED",
+    userId: result.sellerUserId,
+    title: "Withdrawal paid",
+    message: `${amount} has been sent to your bank account.`,
+    actionUrl: "/seller/withdrawals",
+    emailVariables: { amount, status: "paid" },
+  });
 
   return result.updated;
 }
@@ -192,12 +219,15 @@ export async function rejectWithdrawal(adminId: string, withdrawalId: string, re
     return { updated: withdrawal, sellerUserId: sellerProfile.userId };
   });
 
-  await createNotification(
-    result.sellerUserId,
-    "PAYMENT",
-    "Withdrawal rejected",
-    `Your withdrawal request of ₦${Number(result.updated.amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })} was rejected and the amount has been returned to your available balance.`,
-  );
+  const amount = formatNaira(Number(result.updated.amount));
+  await notify({
+    event: "WITHDRAWAL_REJECTED",
+    userId: result.sellerUserId,
+    title: "Withdrawal rejected",
+    message: `Your withdrawal request of ${amount} was rejected and the amount has been returned to your available balance.`,
+    actionUrl: "/seller/withdrawals",
+    emailVariables: { amount, status: "rejected" },
+  });
 
   return result.updated;
 }

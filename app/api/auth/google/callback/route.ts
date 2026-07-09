@@ -3,6 +3,7 @@ import { verifyGoogleOAuthState, exchangeGoogleCode, verifyGoogleIdToken } from 
 import { findOrCreateGoogleUser, recordLoginHistory } from "@/services/users/user.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { establishSession } from "@/services/users/session.service";
+import { notify } from "@/services/notifications/notify.service";
 import { getRequestMeta } from "@/lib/security/request-meta";
 import { ROUTES } from "@/lib/constants/routes";
 import { ROLE_HOME_ROUTE, Role, UserStatus } from "@/lib/constants/roles";
@@ -52,6 +53,21 @@ export async function GET(request: Request) {
 
   await recordLoginHistory(user.id, true, { ipAddress, userAgent });
   await establishSession(user.id, user.role, { ipAddress, userAgent, rememberMe: true });
+
+  // Skip the "new login" alert for an account created moments ago in this
+  // same request (via findOrCreateGoogleUser) — the welcome email already
+  // covers a brand-new signup; this is only for a returning user's login.
+  const justRegistered = Date.now() - user.createdAt.getTime() < 10_000;
+  if (!justRegistered) {
+    const loginMessage = `New login to your account${ipAddress ? ` from ${ipAddress}` : ""}.`;
+    await notify({
+      event: "SECURITY_ALERT",
+      userId: user.id,
+      title: "New login",
+      message: loginMessage,
+      emailVariables: { message: loginMessage },
+    });
+  }
 
   let destination: string = ROLE_HOME_ROUTE[user.role];
   if (user.role === Role.SELLER) {

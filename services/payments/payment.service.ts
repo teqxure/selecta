@@ -1,6 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
+import { alertAdmins } from "@/services/notifications/admin-alerts.service";
 import { getActiveCommissionRateForCategory } from "@/services/platform/commission.service";
 import { recordCustomerPayment, recordVendorCredit, recordCommissionEarned, recordRefund } from "@/services/finance/ledger.service";
 import { transitionOrderStatusInTx } from "@/services/orders/order-state-machine";
@@ -175,6 +177,16 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
     return { payment: current, alreadyProcessed: true as const };
   }
 
+  const formattedAmount = `₦${Number(outcome.updatedPayment.amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
+  await notify({
+    event: "ORDER_PAID",
+    userId: order.buyerId,
+    title: "Payment confirmed",
+    message: `We've received your payment of ${formattedAmount} for this order.`,
+    actionUrl: `/orders/${payment.orderId}`,
+    emailVariables: { orderId: payment.orderId, amount: formattedAmount },
+  });
+
   await Promise.all(
     outcome.created.map(({ userId, transaction }) =>
       createNotification(
@@ -190,17 +202,27 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
 }
 
 export async function markPaymentFailed(paymentId: string) {
-  return db.$transaction(async (tx) => {
+  const payment = await db.$transaction(async (tx) => {
     // Conditional claim — a stale/out-of-order "charge.failed" delivery
     // that arrives after the payment was already confirmed successful
     // must never cancel an order that's actually been paid for.
     const claim = await tx.payment.updateMany({ where: { id: paymentId, status: "PENDING" }, data: { status: "FAILED" } });
     if (claim.count === 0) return null;
 
-    const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
-    await transitionOrderStatusInTx(tx, payment.orderId, { type: "SYSTEM" }, "CANCELLED", { note: "Payment failed" });
-    return payment;
+    const claimed = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    await transitionOrderStatusInTx(tx, claimed.orderId, { type: "SYSTEM" }, "CANCELLED", { note: "Payment failed" });
+    return claimed;
   });
+
+  if (payment) {
+    await alertAdmins(
+      "Payment failed",
+      `A payment of ₦${Number(payment.amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })} (${payment.provider}) failed for order #${payment.orderId.slice(-8)}.`,
+      { actionUrl: `/admin/orders/${payment.orderId}`, metadata: { paymentId: payment.id, orderId: payment.orderId } },
+    );
+  }
+
+  return payment;
 }
 
 async function releaseTransactionInternal(tx: Prisma.TransactionClient, transactionId: string, actorId: string | null) {
@@ -302,7 +324,7 @@ export async function releaseOrderTransactions(orderId: string, actorId: string 
  * actually been refunded.
  */
 export async function refundTransaction(transactionId: string, actorId: string) {
-  return db.$transaction(async (tx) => {
+  const refunded = await db.$transaction(async (tx) => {
     const claim = await tx.transaction.updateMany({
       where: { id: transactionId, status: "HELD_IN_ESCROW" },
       data: { status: "REFUNDED" },
@@ -310,14 +332,14 @@ export async function refundTransaction(transactionId: string, actorId: string) 
     if (claim.count === 0) {
       throw new ValidationError("Only escrowed transactions can be refunded");
     }
-    const refunded = await tx.transaction.findUniqueOrThrow({ where: { id: transactionId } });
+    const transaction = await tx.transaction.findUniqueOrThrow({ where: { id: transactionId } });
 
     await recordRefund(tx, {
-      amount: Number(refunded.amount),
-      userId: refunded.buyerId,
-      sellerId: refunded.sellerId,
-      orderId: refunded.orderId,
-      transactionId: refunded.id,
+      amount: Number(transaction.amount),
+      userId: transaction.buyerId,
+      sellerId: transaction.sellerId,
+      orderId: transaction.orderId,
+      transactionId: transaction.id,
       actorId,
       note: "Transaction refunded",
     });
@@ -326,15 +348,27 @@ export async function refundTransaction(transactionId: string, actorId: string) 
       data: { actorId, action: "TRANSACTION_REFUNDED", entityType: "Transaction", entityId: transactionId },
     });
 
-    if (refunded.paymentId) {
-      const siblings = await tx.transaction.findMany({ where: { paymentId: refunded.paymentId } });
+    if (transaction.paymentId) {
+      const siblings = await tx.transaction.findMany({ where: { paymentId: transaction.paymentId } });
       if (siblings.every((sibling) => sibling.status === "REFUNDED")) {
-        await tx.payment.update({ where: { id: refunded.paymentId }, data: { status: "REFUNDED" } });
+        await tx.payment.update({ where: { id: transaction.paymentId }, data: { status: "REFUNDED" } });
       }
     }
 
-    return refunded;
+    return transaction;
   });
+
+  const amount = `₦${Number(refunded.amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
+  await notify({
+    event: "REFUND_PROCESSED",
+    userId: refunded.buyerId,
+    title: "Refund processed",
+    message: `A refund of ${amount} for this order has been processed back to you.`,
+    actionUrl: `/orders/${refunded.orderId}`,
+    emailVariables: { orderId: refunded.orderId, amount },
+  });
+
+  return refunded;
 }
 
 /** Available (withdrawable), held (escrowed), withdrawn, and lifetime-earned balances for a seller's wallet. */

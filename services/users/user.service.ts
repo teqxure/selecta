@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
-import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { Role, UserStatus } from "@/lib/constants/roles";
 import { sanitizeOptionalText } from "@/lib/security/sanitize";
@@ -23,8 +23,8 @@ export async function createUser(input: RegisterInput) {
   const passwordHash = await hashPassword(input.password);
   const role = input.role;
 
-  return db.$transaction(async (tx) => {
-    const user = await tx.user.create({
+  const user = await db.$transaction(async (tx) => {
+    const created = await tx.user.create({
       data: {
         email: input.email,
         phone: input.phone,
@@ -38,22 +38,31 @@ export async function createUser(input: RegisterInput) {
     if (role === Role.SELLER) {
       await tx.sellerProfile.create({
         data: {
-          userId: user.id,
+          userId: created.id,
           // Placeholder until onboarding step 2 — every seller starts a
           // profile at registration so the onboarding wizard always has a
           // row to update rather than branching on "does one exist yet".
-          businessName: `${user.firstName} ${user.lastName}`,
+          businessName: `${created.firstName} ${created.lastName}`,
           onboardingStep: 1,
         },
       });
     }
 
     await tx.userActivity.create({
-      data: { userId: user.id, action: "ACCOUNT_CREATED", metadata: { role } },
+      data: { userId: created.id, action: "ACCOUNT_CREATED", metadata: { role } },
     });
 
-    return user;
+    return created;
   });
+
+  await notify({
+    event: "USER_REGISTERED",
+    userId: user.id,
+    title: "Welcome to Selecta!",
+    message: "Your account is ready. Start exploring quality fashion from verified sellers.",
+  });
+
+  return user;
 }
 
 export async function getUserById(id: string) {
@@ -90,8 +99,8 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile, intendedRol
     });
   }
 
-  return db.$transaction(async (tx) => {
-    const user = await tx.user.create({
+  const user = await db.$transaction(async (tx) => {
+    const created = await tx.user.create({
       data: {
         email: profile.email,
         googleId: profile.googleId,
@@ -106,19 +115,28 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile, intendedRol
     if (intendedRole === Role.SELLER) {
       await tx.sellerProfile.create({
         data: {
-          userId: user.id,
-          businessName: `${user.firstName} ${user.lastName}`,
+          userId: created.id,
+          businessName: `${created.firstName} ${created.lastName}`,
           onboardingStep: 1,
         },
       });
     }
 
     await tx.userActivity.create({
-      data: { userId: user.id, action: "ACCOUNT_CREATED", metadata: { role: intendedRole, via: "google" } },
+      data: { userId: created.id, action: "ACCOUNT_CREATED", metadata: { role: intendedRole, via: "google" } },
     });
 
-    return user;
+    return created;
   });
+
+  await notify({
+    event: "USER_REGISTERED",
+    userId: user.id,
+    title: "Welcome to Selecta!",
+    message: "Your account is ready. Start exploring quality fashion from verified sellers.",
+  });
+
+  return user;
 }
 
 export async function updateBuyerProfile(userId: string, input: UpdateBuyerProfileInput) {
@@ -195,13 +213,14 @@ export async function changeUserRole(actorId: string, targetUserId: string, newR
     return user;
   });
 
-  await createNotification(
-    updated.id,
-    "SYSTEM",
-    "Your account role changed",
-    `Your Selecta account role changed from ${previousRole} to ${newRole}.`,
-    { fromRole: previousRole, toRole: newRole },
-  );
+  await notify({
+    event: "SECURITY_ALERT",
+    userId: updated.id,
+    title: "Your account role changed",
+    message: `Your Selecta account role changed from ${previousRole} to ${newRole}.`,
+    metadata: { fromRole: previousRole, toRole: newRole },
+    emailVariables: { message: `Your account role changed from ${previousRole} to ${newRole}.` },
+  });
 
   // A Super-Admin-tier transition (either direction) is the highest-stakes
   // change this function can make — surface it to every other active
@@ -211,15 +230,17 @@ export async function changeUserRole(actorId: string, targetUserId: string, newR
       where: { role: Role.SUPER_ADMIN, status: UserStatus.ACTIVE, id: { notIn: [actorId, targetUserId] } },
       select: { id: true },
     });
+    const alertMessage = `${updated.firstName} ${updated.lastName} (${updated.email}) changed from ${previousRole} to ${newRole}.`;
     await Promise.all(
       otherSuperAdmins.map((admin) =>
-        createNotification(
-          admin.id,
-          "SYSTEM",
-          "Super Admin role change",
-          `${updated.firstName} ${updated.lastName} (${updated.email}) changed from ${previousRole} to ${newRole}.`,
-          { targetUserId, fromRole: previousRole, toRole: newRole, actorId },
-        ),
+        notify({
+          event: "SECURITY_ALERT",
+          userId: admin.id,
+          title: "Super Admin role change",
+          message: alertMessage,
+          metadata: { targetUserId, fromRole: previousRole, toRole: newRole, actorId },
+          emailVariables: { message: alertMessage },
+        }),
       ),
     );
   }

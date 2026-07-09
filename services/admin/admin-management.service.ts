@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
-import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { Role, UserStatus } from "@/lib/constants/roles";
 import type { CreateAdminInput } from "@/lib/validators/admin-management";
@@ -87,12 +87,14 @@ export async function updateAdminPermissions(
 
     return admin;
   }).then(async (admin) => {
-    await createNotification(
-      admin.id,
-      "SYSTEM",
-      "Your admin permissions changed",
-      "Selecta updated what you have access to. Refresh the page to see your current permissions.",
-    );
+    const message = "Selecta updated what you have access to. Refresh the page to see your current permissions.";
+    await notify({
+      event: "SECURITY_ALERT",
+      userId: admin.id,
+      title: "Your admin permissions changed",
+      message,
+      emailVariables: { message },
+    });
     return admin;
   });
 }

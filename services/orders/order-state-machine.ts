@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { createNotification } from "@/services/notifications/notification.service";
+import { notify } from "@/services/notifications/notify.service";
+import type { NotificationEventName } from "@/services/notifications/events";
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from "@/lib/errors";
 import type { Prisma } from "@/generated/prisma/client";
 import type { OrderStatus } from "@/generated/prisma/enums";
@@ -93,6 +94,14 @@ const STATUS_NOTIFICATION_COPY: Partial<Record<OrderStatus, string>> = {
   REFUNDED: "Your order has been refunded.",
 };
 
+/** Only statuses with a dedicated templated email; everything else falls back to ORDER_STATUS_CHANGED (in-app only). PAID is also reachable directly from payment.service.ts's webhook path, which notifies separately — this covers the outer wrapper's own callers. */
+const STATUS_EVENT: Partial<Record<OrderStatus, NotificationEventName>> = {
+  PAID: "ORDER_PAID",
+  IN_TRANSIT: "ORDER_SHIPPED",
+  DELIVERED: "ORDER_DELIVERED",
+  COMPLETED: "ORDER_COMPLETED",
+};
+
 interface TransitionOptions {
   note?: string;
   /** Suppress the buyer notification — used when a caller sends its own, more specific message (e.g. dispute resolution). */
@@ -172,7 +181,14 @@ export async function transitionOrderStatus(
 
   if (!options.skipNotification) {
     const message = STATUS_NOTIFICATION_COPY[nextStatus] ?? `Your order is now ${nextStatus.replaceAll("_", " ").toLowerCase()}.`;
-    await createNotification(result.buyerId, "ORDER", "Order update", message);
+    await notify({
+      event: STATUS_EVENT[nextStatus] ?? "ORDER_STATUS_CHANGED",
+      userId: result.buyerId,
+      title: "Order update",
+      message,
+      actionUrl: `/orders/${orderId}`,
+      emailVariables: { orderId },
+    });
   }
 
   return result;

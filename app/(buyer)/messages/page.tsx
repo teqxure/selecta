@@ -25,27 +25,27 @@ export default async function BuyerMessagesPage({
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
       <h1 className="font-display text-2xl font-semibold text-foreground">Messages</h1>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <nav className="flex flex-wrap gap-2">
           <Link href={ROUTES.messages}>
-            <Button variant={!unread && !archived ? "secondary" : "ghost"} size="sm">
+            <Button variant={!unread && !archived ? "secondary" : "ghost"} size="sm" className="min-h-10">
               All
             </Button>
           </Link>
           <Link href={`${ROUTES.messages}?unread=true`}>
-            <Button variant={unread === "true" ? "secondary" : "ghost"} size="sm">
+            <Button variant={unread === "true" ? "secondary" : "ghost"} size="sm" className="min-h-10">
               Unread
             </Button>
           </Link>
           <Link href={`${ROUTES.messages}?archived=true`}>
-            <Button variant={archived === "true" ? "secondary" : "ghost"} size="sm">
+            <Button variant={archived === "true" ? "secondary" : "ghost"} size="sm" className="min-h-10">
               Archived
             </Button>
           </Link>
         </nav>
         <form action={ROUTES.messages} method="GET" className="flex items-center gap-2">
-          <Input name="q" defaultValue={q ?? ""} placeholder="Search by store name…" className="w-48" />
-          <Button type="submit" size="sm" variant="secondary">
+          <Input name="q" defaultValue={q ?? ""} placeholder="Search by store name…" className="w-full sm:w-48" />
+          <Button type="submit" size="sm" variant="secondary" className="min-h-10 shrink-0">
             Search
           </Button>
         </form>

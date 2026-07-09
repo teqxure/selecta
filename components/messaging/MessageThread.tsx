@@ -38,12 +38,15 @@ export function MessageThread({
   otherPartyName,
   sendAction,
   uploadFolder,
+  hasMobileBottomNav = false,
 }: {
   messages: ThreadMessage[];
   currentUserId: string;
   otherPartyName: string;
   sendAction: (prevState: SendMessageState, formData: FormData) => Promise<SendMessageState>;
   uploadFolder: string;
+  /** True for the buyer's thread page, which sits above MobileBottomNav — the seller dashboard has no such bar, so its compose bar can sit flush at the bottom. */
+  hasMobileBottomNav?: boolean;
 }) {
   const [state, formAction] = useActionState(sendAction, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -108,6 +111,7 @@ export function MessageThread({
         )}
       </div>
 
+      {/* Fixed on mobile so the compose bar is always reachable regardless of how much sits above it (offer panels, warnings) — back to normal in-flow placement from sm: up. */}
       <form
         ref={formRef}
         action={(formData) => {
@@ -116,7 +120,7 @@ export function MessageThread({
           formRef.current?.reset();
           setImageUrl(null);
         }}
-        className="flex flex-col gap-2"
+        className={`fixed inset-x-0 z-30 flex flex-col gap-2 border-t border-border bg-background/95 p-3 backdrop-blur-md sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none ${hasMobileBottomNav ? "bottom-16" : "bottom-0"}`}
       >
         {imageUrl && (
           <div className="relative h-16 w-16">
@@ -124,15 +128,15 @@ export function MessageThread({
             <button
               type="button"
               onClick={() => setImageUrl(null)}
-              className="absolute -right-1.5 -top-1.5 rounded-full bg-foreground p-0.5 text-background"
+              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-background"
               aria-label="Remove image"
             >
-              <X className="h-3 w-3" strokeWidth={2} />
+              <X className="h-3.5 w-3.5" strokeWidth={2} />
             </button>
           </div>
         )}
-        <div className="flex items-end gap-2">
-          <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground">
+        <div className="mx-auto flex w-full max-w-3xl items-end gap-2">
+          <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground">
             <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} disabled={isUploading} />
             <ImageIcon className="h-4 w-4" strokeWidth={2} />
           </label>
@@ -145,6 +149,7 @@ export function MessageThread({
           <SendButton />
         </div>
       </form>
+      <div className={`sm:hidden ${hasMobileBottomNav ? "h-24" : "h-20"}`} aria-hidden />
     </div>
   );
 }

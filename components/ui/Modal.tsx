@@ -41,7 +41,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="ml-auto rounded-full p-1 text-muted-foreground hover:bg-muted"
+          className="-m-2 ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
         >
           ✕
         </button>

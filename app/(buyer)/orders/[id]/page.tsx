@@ -43,9 +43,11 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
-      <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-semibold text-foreground">Order #{order.id.slice(-8)}</h1>
-        <Badge tone={STATUS_TONE[order.status]}>{order.status.replaceAll("_", " ")}</Badge>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="min-w-0 truncate font-display text-2xl font-semibold text-foreground">Order #{order.id.slice(-8)}</h1>
+        <Badge tone={STATUS_TONE[order.status]} className="shrink-0 whitespace-nowrap">
+          {order.status.replaceAll("_", " ")}
+        </Badge>
       </div>
 
       {order.status === "AWAITING_PAYMENT" && (
@@ -130,7 +132,7 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
               <p className="text-sm text-muted-foreground">Courier: {order.delivery.courier}</p>
             )}
             {order.delivery.trackingCode && (
-              <p className="text-sm text-muted-foreground">Tracking code: {order.delivery.trackingCode}</p>
+              <p className="break-all text-sm text-muted-foreground">Tracking code: {order.delivery.trackingCode}</p>
             )}
             {order.delivery.estimatedAt && (
               <p className="text-sm text-muted-foreground">

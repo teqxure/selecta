@@ -34,7 +34,7 @@ export function SaveButton({ productId, initialSaved, likeCount, className }: Sa
       aria-pressed={optimisticSaved}
       aria-label={optimisticSaved ? "Remove from saved" : "Save item"}
       className={cn(
-        "flex items-center gap-1 rounded-full bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm",
+        "flex min-h-9 items-center gap-1 rounded-full bg-background/90 px-2.5 py-1.5 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm",
         className,
       )}
     >
@@ -47,7 +47,7 @@ export function SaveButton({ productId, initialSaved, likeCount, className }: Sa
           className="flex"
         >
           <Heart
-            className={cn("h-3.5 w-3.5", optimisticSaved ? "fill-accent text-accent" : "text-muted-foreground")}
+            className={cn("h-4 w-4", optimisticSaved ? "fill-accent text-accent" : "text-muted-foreground")}
             strokeWidth={2}
           />
         </motion.span>

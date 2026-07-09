@@ -21,8 +21,8 @@ export function AddressBook({ addresses }: { addresses: AddressRecord[] }) {
     <div className="flex flex-col gap-4">
       {addresses.map((address) => (
         <Card key={address.id}>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <p className="font-medium text-secondary-foreground">{address.label || "Address"}</p>
                 {address.isDefault && <Badge tone="accent">Default</Badge>}
@@ -31,18 +31,18 @@ export function AddressBook({ addresses }: { addresses: AddressRecord[] }) {
                 {address.line1}, {address.city}, {address.state}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {!address.isDefault && (
                 <form action={setDefaultAddressAction}>
                   <input type="hidden" name="addressId" value={address.id} />
-                  <Button type="submit" variant="ghost" size="sm">
+                  <Button type="submit" variant="ghost" size="sm" className="min-h-10">
                     Set default
                   </Button>
                 </form>
               )}
               <form action={deleteAddressAction}>
                 <input type="hidden" name="addressId" value={address.id} />
-                <Button type="submit" variant="ghost" size="sm">
+                <Button type="submit" variant="ghost" size="sm" className="min-h-10">
                   Remove
                 </Button>
               </form>
@@ -57,7 +57,7 @@ export function AddressBook({ addresses }: { addresses: AddressRecord[] }) {
             <p className="text-sm font-medium text-secondary-foreground">Add a new address</p>
             <Input name="label" label="Label" placeholder="Home, Work…" />
             <Input name="line1" label="Address" required />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input name="city" label="City" required />
               <Input name="state" label="State" required />
             </div>

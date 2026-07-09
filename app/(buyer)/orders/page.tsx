@@ -37,12 +37,14 @@ export default async function BuyerOrdersPage() {
           {orders.map((order) => (
             <Link key={order.id} href={ROUTES.order(order.id)}>
               <Card hoverable>
-                <CardContent className="flex items-center justify-between p-4">
-                  <div>
+                <CardContent className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
                     <p className="font-medium text-secondary-foreground">Order #{order.id.slice(-8)}</p>
                     <p className="text-sm text-muted-foreground">{order.items.length} item(s)</p>
                   </div>
-                  <Badge tone={STATUS_TONE[order.status]}>{order.status.replaceAll("_", " ")}</Badge>
+                  <Badge tone={STATUS_TONE[order.status]} className="shrink-0 whitespace-nowrap">
+                    {order.status.replaceAll("_", " ")}
+                  </Badge>
                 </CardContent>
               </Card>
             </Link>

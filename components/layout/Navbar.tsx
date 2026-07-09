@@ -74,17 +74,21 @@ export async function Navbar() {
               </Link>
               <Link
                 href={ROUTES.profile}
-                className="flex items-center gap-2 rounded-full border border-border py-1 pl-1 pr-3 transition-colors hover:bg-muted"
+                className="flex items-center gap-2 rounded-full border border-border py-1 pl-1 pr-1 transition-colors hover:bg-muted sm:pr-3"
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
                   {user.firstName.charAt(0).toUpperCase()}
                 </span>
-                <span className="text-sm font-medium text-foreground">{user.firstName}</span>
+                <span className="hidden truncate text-sm font-medium text-foreground sm:inline">{user.firstName}</span>
               </Link>
               <form action={logoutAction}>
-                <Button type="submit" variant="ghost" size="sm" aria-label="Log out" className="px-2">
+                <button
+                  type="submit"
+                  aria-label="Log out"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+                >
                   <LogOut className="h-4 w-4" strokeWidth={2} />
-                </Button>
+                </button>
               </form>
             </>
           ) : (

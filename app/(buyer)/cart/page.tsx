@@ -48,7 +48,7 @@ export default async function CartPage() {
                     </p>
                   </div>
                   <form action={removeFromCartAction.bind(null, item.productId)}>
-                    <Button type="submit" size="sm" variant="ghost">
+                    <Button type="submit" size="sm" variant="ghost" className="min-h-10">
                       Remove
                     </Button>
                   </form>
@@ -79,7 +79,13 @@ export default async function CartPage() {
             </CardContent>
           </Card>
 
-          <CheckoutButton />
+          {/* Sticky on mobile (sits just above MobileBottomNav) so "Place order" is always reachable without scrolling past every cart item; back to normal in-flow placement from sm: up. */}
+          <div className="fixed inset-x-0 bottom-16 z-30 border-t border-border bg-background/95 p-3 backdrop-blur-md sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+            <div className="mx-auto max-w-2xl">
+              <CheckoutButton />
+            </div>
+          </div>
+          <div className="h-20 sm:hidden" aria-hidden />
         </>
       )}
     </div>

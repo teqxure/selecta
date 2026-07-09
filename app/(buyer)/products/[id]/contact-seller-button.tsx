@@ -29,14 +29,14 @@ export function ContactSellerButton({ productId, isLoggedIn }: { productId: stri
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <form action={boundStartConversation} className="flex-1">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <form action={boundStartConversation} className="sm:flex-1">
           <SubmitButton variant="secondary" className="w-full">
             <MessageCircle className="h-4 w-4" strokeWidth={2} />
             Message seller
           </SubmitButton>
         </form>
-        <Button variant="outline" className="flex-1" onClick={() => setShowOfferForm((v) => !v)}>
+        <Button variant="outline" className="w-full sm:w-auto sm:flex-1" onClick={() => setShowOfferForm((v) => !v)}>
           <Tag className="h-4 w-4" strokeWidth={2} />
           Make an offer
         </Button>

@@ -103,7 +103,7 @@ export function FilterBar({ categories, rawParams }: { categories: CategoryOptio
           </Field>
 
           <Field label="Price range (₦)" htmlFor="minPrice">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 id="minPrice"
                 name="minPrice"
@@ -113,7 +113,7 @@ export function FilterBar({ categories, rawParams }: { categories: CategoryOptio
                 aria-label="Minimum price"
                 className={fieldClassName}
               />
-              <span className="text-muted-foreground">–</span>
+              <span className="hidden text-muted-foreground sm:inline">–</span>
               <input
                 name="maxPrice"
                 type="number"

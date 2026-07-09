@@ -31,12 +31,12 @@ export function ProfileForm({
       <CardContent className="p-5">
         <form action={formAction} className="flex flex-col gap-4">
           <Input label="Email" value={email} disabled readOnly />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input name="firstName" label="First name" defaultValue={defaultFirstName} required />
             <Input name="lastName" label="Last name" defaultValue={defaultLastName} required />
           </div>
           <Input name="phone" type="tel" label="Phone number" defaultValue={defaultPhone} />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input name="city" label="City" defaultValue={defaultCity} />
             <Input name="state" label="State" defaultValue={defaultState} />
           </div>

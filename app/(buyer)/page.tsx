@@ -82,16 +82,16 @@ export default async function MarketplaceHomePage() {
                 <Link
                   key={category.id}
                   href={`${ROUTES.search}?categoryId=${category.id}`}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-secondary px-4 py-3 transition-colors hover:border-accent/50"
+                  className="flex max-w-[calc(100vw-3rem)] items-center gap-3 rounded-2xl border border-border bg-secondary px-4 py-3 transition-colors hover:border-accent/50"
                 >
                   {category.imageUrl && (
                     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
                       <Image src={category.imageUrl} alt={category.name} fill className="object-cover" />
                     </div>
                   )}
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{category.name}</p>
-                    <p className="text-xs text-muted-foreground">{category.productCount} listings</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{category.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{category.productCount} listings</p>
                   </div>
                 </Link>
               ))}

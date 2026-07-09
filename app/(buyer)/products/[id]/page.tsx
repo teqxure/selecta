@@ -51,7 +51,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const sellerName = product.seller.storeName ?? product.seller.businessName;
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-10">
+    <div className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-10 pb-28 sm:pb-10">
       {product.status !== "ACTIVE" && (
         <Badge tone="warning">Preview only — status: {product.status.replace("_", " ")}</Badge>
       )}
@@ -62,7 +62,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         <div className="flex flex-col gap-5">
           <div>
             <div className="flex items-start justify-between gap-3">
-              <h1 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">{product.title}</h1>
+              <h1 className="min-w-0 break-words font-display text-2xl font-semibold text-foreground sm:text-3xl">{product.title}</h1>
               <SaveButton productId={product.id} initialSaved={saved} likeCount={product.likeCount} />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -97,9 +97,23 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           />
 
           <div className="flex flex-col gap-2 pt-1">
-            <AddToCartButton productId={product.id} />
+            <div className="hidden sm:block">
+              <AddToCartButton productId={product.id} />
+            </div>
             <ContactSellerButton productId={product.id} isLoggedIn={Boolean(user)} />
             <ShareButton productId={product.id} title={product.title} />
+          </div>
+        </div>
+      </div>
+
+      {/* Persistent mobile add-to-cart bar — sits just above MobileBottomNav (which reserves pb-16 in the buyer layout) so the primary CTA is always reachable without scrolling past photos/description/seller info. */}
+      <div className="fixed inset-x-0 bottom-16 z-30 border-t border-border bg-background/95 p-3 backdrop-blur-md sm:hidden">
+        <div className="mx-auto flex max-w-5xl items-center gap-3">
+          <span className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-accent">
+            {format(Number(displayPrice))}
+          </span>
+          <div className="w-40 shrink-0">
+            <AddToCartButton productId={product.id} />
           </div>
         </div>
       </div>

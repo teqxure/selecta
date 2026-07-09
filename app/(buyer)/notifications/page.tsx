@@ -50,7 +50,7 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
       <div className="flex flex-wrap gap-1.5">
         <Link
           href={ROUTES.notifications}
-          className={`rounded-full px-3 py-1 text-xs font-medium ${!activeType ? "bg-accent/15 text-accent" : "text-muted-foreground hover:bg-muted"}`}
+          className={`inline-flex min-h-9 items-center justify-center rounded-full px-3.5 text-xs font-medium ${!activeType ? "bg-accent/15 text-accent" : "text-muted-foreground hover:bg-muted"}`}
         >
           All
         </Link>
@@ -58,7 +58,7 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
           <Link
             key={category}
             href={`${ROUTES.notifications}?type=${category}`}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${activeType === category ? "bg-accent/15 text-accent" : "text-muted-foreground hover:bg-muted"}`}
+            className={`inline-flex min-h-9 items-center justify-center rounded-full px-3.5 text-xs font-medium ${activeType === category ? "bg-accent/15 text-accent" : "text-muted-foreground hover:bg-muted"}`}
           >
             {CATEGORY_LABELS[category]}
           </Link>
@@ -87,18 +87,18 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
                     <p className="text-sm text-muted-foreground">{notification.message}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{notification.createdAt.toLocaleString()}</p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-2">
                     {!notification.isRead && (
                       <form action={markNotificationReadAction}>
                         <input type="hidden" name="notificationId" value={notification.id} />
-                        <Button type="submit" variant="ghost" size="sm">
+                        <Button type="submit" variant="ghost" size="sm" className="min-h-10">
                           Mark read
                         </Button>
                       </form>
                     )}
                     <form action={deleteNotificationAction}>
                       <input type="hidden" name="notificationId" value={notification.id} />
-                      <Button type="submit" variant="ghost" size="sm">
+                      <Button type="submit" variant="ghost" size="sm" className="min-h-10">
                         Delete
                       </Button>
                     </form>

@@ -55,6 +55,7 @@ export default async function BuyerMessageThreadPage({ params }: { params: Promi
         otherPartyName={conversation.sellerProfile.storeName ?? conversation.sellerProfile.businessName}
         sendAction={boundSend}
         uploadFolder="messages"
+        hasMobileBottomNav
       />
     </div>
   );

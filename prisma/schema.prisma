@@ -193,31 +193,35 @@ enum NotificationType {
 // ---------------------------------------------------------------------------
 
 model User {
-  id              String     @id @default(cuid())
-  email           String     @unique
-  phone           String?    @unique
-  passwordHash    String?    @map("password_hash")
+  id                    String     @id @default(cuid())
+  email                 String     @unique
+  phone                 String?    @unique
+  passwordHash          String?    @map("password_hash")
   /// Google's stable account identifier ("sub" claim) — set once a user
   /// signs in with Google, whether that creates a brand-new account or
   /// links to an existing email/password one. Never null for a
   /// Google-only account (which also has passwordHash: null).
-  googleId        String?    @unique @map("google_id")
-  firstName       String     @map("first_name")
-  lastName        String     @map("last_name")
-  avatarUrl       String?    @map("avatar_url")
-  role            Role       @default(BUYER)
-  status          UserStatus @default(ACTIVE)
+  googleId              String?    @unique @map("google_id")
+  firstName             String     @map("first_name")
+  lastName              String     @map("last_name")
+  avatarUrl             String?    @map("avatar_url")
+  role                  Role       @default(BUYER)
+  status                UserStatus @default(ACTIVE)
   /// Individually-granted permission strings — only meaningful when role
   /// is ADMIN. SUPER_ADMIN's authority is implicit (wildcard, never
   /// stored); SELLER/BUYER get a fixed role-wide set defined in code, not
   /// per-user grants. See lib/auth/permissions.ts.
-  permissions     String[]   @default([])
-  city            String?
-  state           String?
-  preferences     Json?
-  emailVerifiedAt DateTime?  @map("email_verified_at")
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
+  permissions           String[]   @default([])
+  city                  String?
+  state                 String?
+  preferences           Json?
+  emailVerifiedAt       DateTime?  @map("email_verified_at")
+  /// Set by Super Admin to block sending new messages (not a full account
+  /// suspension) — see Phase 11's "restrict messaging" admin action.
+  /// Checked in conversation.service.ts before every send.
+  messagingRestrictedAt DateTime?  @map("messaging_restricted_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
 
   sellerProfile   SellerProfile?
   wallet          Wallet?
@@ -254,6 +258,8 @@ model User {
   notificationDeliveries    NotificationDelivery[]
   subscriptionPlansCreated  SubscriptionPlan[]
   growthPartnerApplications GrowthPartnerApplication[]
+  offersAsBuyer             Offer[]                    @relation("BuyerOffers")
+  messageFlags              MessageFlag[]
 
   @@index([role])
   @@index([status])
@@ -299,6 +305,7 @@ model SellerProfile {
   boostCampaigns           BoostCampaign[]
   monetizationPayments     MonetizationPayment[]
   growthPartnerApplication GrowthPartnerApplication[]
+  offers                   Offer[]
 
   @@index([verificationStatus])
   @@index([agentId])
@@ -487,6 +494,8 @@ model Product {
   events         ProductEvent[]
   cartItems      CartItem[]
   boostCampaigns BoostCampaign[]
+  conversations  Conversation[]
+  offers         Offer[]
 
   @@index([sellerId])
   @@index([categoryId])
@@ -612,6 +621,8 @@ model Order {
   statusHistory OrderStatusHistory[]
   disputes      Dispute[]
   ledgerEntries LedgerEntry[]
+  conversations Conversation[]
+  offer         Offer?
 
   @@index([buyerId])
   @@index([status])
@@ -881,18 +892,45 @@ model DeliveryEvent {
 // Messaging (foundation — buyer/seller only, no groups, no attachments yet)
 // ---------------------------------------------------------------------------
 
+enum ConversationType {
+  PRODUCT_INQUIRY
+  ORDER_SUPPORT
+  DISPUTE_DISCUSSION
+}
+
+/// One conversation per (buyer, seller, type, product/order/dispute) rather
+/// than a single lifetime thread per buyer-seller pair — asking about two
+/// different products, or getting order support, are separate threads with
+/// their own context. Matching on create is done at the application layer
+/// (`getOrCreateConversation`), not a DB unique constraint, since Postgres
+/// treats NULL productId/orderId/disputeId columns as always-distinct,
+/// which would defeat "reuse the general inquiry thread" matching.
 model Conversation {
-  id              String   @id @default(cuid())
-  buyerId         String   @map("buyer_id")
-  sellerProfileId String   @map("seller_profile_id")
-  lastMessageAt   DateTime @default(now()) @map("last_message_at")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id                 String           @id @default(cuid())
+  buyerId            String           @map("buyer_id")
+  sellerProfileId    String           @map("seller_profile_id")
+  type               ConversationType @default(PRODUCT_INQUIRY)
+  productId          String?          @map("product_id")
+  orderId            String?          @map("order_id")
+  disputeId          String?          @map("dispute_id")
+  isArchivedByBuyer  Boolean          @default(false) @map("is_archived_by_buyer")
+  isArchivedBySeller Boolean          @default(false) @map("is_archived_by_seller")
+  isReported         Boolean          @default(false) @map("is_reported")
+  reportedAt         DateTime?        @map("reported_at")
+  reportReason       String?          @map("report_reason")
+  lastMessageAt      DateTime         @default(now()) @map("last_message_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
 
   buyer         User          @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
   sellerProfile SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  order         Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  dispute       Dispute?      @relation(fields: [disputeId], references: [id], onDelete: SetNull)
   messages      Message[]
+  offers        Offer[]
+  flags         MessageFlag[]
 
-  @@unique([buyerId, sellerProfileId])
+  @@index([buyerId, sellerProfileId, type])
   @@index([sellerProfileId, lastMessageAt])
   @@map("conversations")
 }
@@ -902,14 +940,93 @@ model Message {
   conversationId String    @map("conversation_id")
   senderId       String    @map("sender_id")
   body           String
+  imageUrl       String?   @map("image_url")
   readAt         DateTime? @map("read_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  flag         MessageFlag?
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+enum MessageFlagType {
+  PHONE_NUMBER
+  EMAIL_ADDRESS
+  WHATSAPP
+  EXTERNAL_PAYMENT
+  SOCIAL_HANDLE
+  BANK_ACCOUNT
+}
+
+/// One row per message that matched a contact-sharing/off-platform pattern
+/// — the source of truth for the Phase-5 warning flow and Phase-11 admin
+/// trust dashboard. `matchedSnippet` is a short, already-redacted excerpt
+/// (never the full contact detail) kept only so a reviewer can see *why*
+/// it was flagged without the flag table itself becoming a second place
+/// the actual phone/email leaks to.
+model MessageFlag {
+  id             String          @id @default(cuid())
+  messageId      String          @unique @map("message_id")
+  conversationId String          @map("conversation_id")
+  userId         String          @map("user_id")
+  flagType       MessageFlagType @map("flag_type")
+  matchedSnippet String          @map("matched_snippet")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([conversationId])
+  @@map("message_flags")
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COUNTERED
+  EXPIRED
+  CANCELLED
+}
+
+/// A price negotiation scoped to one product inquiry conversation. A
+/// counter-offer is a new row linked back via `previousOfferId` (the old
+/// row moves to COUNTERED) rather than mutating amount in place, so the
+/// full back-and-forth stays visible. Accepting creates a real Order at
+/// exactly this amount — `order.service.ts#createOrder` re-reads the
+/// ACCEPTED offer server-side rather than trusting a client-supplied price,
+/// so payment still flows through the existing escrow pipeline unchanged.
+model Offer {
+  id              String      @id @default(cuid())
+  conversationId  String      @map("conversation_id")
+  productId       String      @map("product_id")
+  buyerId         String      @map("buyer_id")
+  sellerId        String      @map("seller_id")
+  amount          Decimal     @db.Decimal(10, 2)
+  status          OfferStatus @default(PENDING)
+  previousOfferId String?     @unique @map("previous_offer_id")
+  orderId         String?     @unique @map("order_id")
+  expiresAt       DateTime?   @map("expires_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  conversation  Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyer         User          @relation("BuyerOffers", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller        SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  previousOffer Offer?        @relation("OfferCounters", fields: [previousOfferId], references: [id], onDelete: SetNull)
+  counteredBy   Offer?        @relation("OfferCounters")
+  order         Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([sellerId, status])
+  @@index([buyerId])
+  @@map("offers")
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,10 +1149,11 @@ model Dispute {
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
-  order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  buyer      User          @relation("BuyerDisputes", fields: [buyerId], references: [id])
-  seller     SellerProfile @relation(fields: [sellerId], references: [id])
-  resolvedBy User?         @relation("ResolvedDisputes", fields: [resolvedById], references: [id], onDelete: SetNull)
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  buyer         User           @relation("BuyerDisputes", fields: [buyerId], references: [id])
+  seller        SellerProfile  @relation(fields: [sellerId], references: [id])
+  resolvedBy    User?          @relation("ResolvedDisputes", fields: [resolvedById], references: [id], onDelete: SetNull)
+  conversations Conversation[]
 
   @@index([status])
   @@index([sellerId])

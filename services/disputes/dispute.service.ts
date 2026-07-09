@@ -4,6 +4,8 @@ import { notify } from "@/services/notifications/notify.service";
 import { alertAdmins } from "@/services/notifications/admin-alerts.service";
 import { releaseTransaction, refundTransaction } from "@/services/payments/payment.service";
 import { transitionOrderStatus } from "@/services/orders/order-state-machine";
+import { getOrCreateConversation } from "@/services/messaging/conversation.service";
+import { ROUTES } from "@/lib/constants/routes";
 import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
 import type { DisputeType } from "@/generated/prisma/enums";
 import type { OrderStatus } from "@/generated/prisma/enums";
@@ -61,6 +63,10 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
     },
   });
 
+  // A dedicated thread so buyer, seller, and (via the admin trust dashboard)
+  // support staff can discuss the dispute directly — never off-platform.
+  const conversation = await getOrCreateConversation(buyerId, input.sellerId, { type: "DISPUTE_DISCUSSION", orderId: input.orderId, disputeId: dispute.id });
+
   const sellerProfile = await db.sellerProfile.findUniqueOrThrow({ where: { id: input.sellerId } });
   const orderRef = order.id.slice(-8);
   await notify({
@@ -68,7 +74,7 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
     userId: sellerProfile.userId,
     title: "A dispute was opened",
     message: `A buyer opened a dispute on order #${orderRef} — Selecta will review it shortly.`,
-    actionUrl: `/seller/orders/${order.id}`,
+    actionUrl: ROUTES.seller.message(conversation.id),
     emailVariables: { orderId: order.id, message: `A dispute was opened on order #${orderRef}.` },
   });
 
@@ -78,7 +84,7 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
     { actionUrl: `/admin/disputes`, metadata: { disputeId: dispute.id, orderId: order.id } },
   );
 
-  return dispute;
+  return { ...dispute, conversationId: conversation.id };
 }
 
 export function listDisputesForBuyer(buyerId: string) {

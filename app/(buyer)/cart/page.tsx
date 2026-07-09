@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, ShieldCheck } from "lucide-react";
 import { currentUser } from "@/lib/auth/current-user";
 import { listCartItems } from "@/services/products/cart.service";
 import { ROUTES } from "@/lib/constants/routes";
@@ -62,6 +62,19 @@ export default async function CartPage() {
               <p className="font-medium text-secondary-foreground">Total</p>
               <p className="text-lg font-semibold text-accent">
                 {new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN" }).format(total)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-accent/30 bg-accent/5">
+            <CardContent className="flex flex-col gap-1.5 p-4 text-sm">
+              <p className="flex items-center gap-2 font-medium text-foreground">
+                <ShieldCheck className="h-4 w-4 text-accent" strokeWidth={2} />
+                Your payment is protected when you buy through Selecta.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Funds are held in escrow until you confirm delivery, every purchase is eligible for dispute resolution, and refund
+                support is built in — none of that applies to payments made outside Selecta.
               </p>
             </CardContent>
           </Card>

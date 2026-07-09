@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { fileDisputeAction, type FileDisputeState } from "./actions";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
+import { ROUTES } from "@/lib/constants/routes";
 
 const initialState: FileDisputeState = {};
 
@@ -18,7 +20,12 @@ export function DisputeForm({ orderId, sellers }: { orderId: string; sellers: Se
   if (state.success) {
     return (
       <p className="text-sm text-muted-foreground">
-        Your report has been submitted — Selecta will review it and follow up.
+        Your report has been submitted — Selecta will review it and follow up.{" "}
+        {state.conversationId && (
+          <Link href={ROUTES.message(state.conversationId)} className="font-medium text-accent hover:underline">
+            Discuss it with the seller →
+          </Link>
+        )}
       </p>
     );
   }

@@ -114,7 +114,10 @@ export default async function StorefrontPage({ params }: { params: Promise<{ slu
                       </p>
                       <Badge tone={STATUS_TONE.ACTIVE}>★ {review.rating}</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">on {review.product.title}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs text-muted-foreground">on {review.product.title}</p>
+                      <Badge tone="accent">Verified purchase</Badge>
+                    </div>
                     {review.comment && <p className="text-sm text-foreground">{review.comment}</p>}
                   </CardContent>
                 </Card>

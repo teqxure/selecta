@@ -14,6 +14,7 @@ export const ADMIN_PERMISSIONS = [
   "reports.view",
   "content.manage",
   "payouts.manage",
+  "support.messages",
 ] as const;
 
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
@@ -28,6 +29,7 @@ export const ADMIN_PERMISSION_LABELS: Record<AdminPermission, string> = {
   "reports.view": "View finance & platform reports",
   "content.manage": "Manage categories & platform content",
   "payouts.manage": "Review and approve seller withdrawal requests",
+  "support.messages": "View buyer/seller conversations for support and trust review",
 };
 
 /**

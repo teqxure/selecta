@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Eye, Heart, Share2, TrendingUp, Search, MousePointerClick, ShoppingBag, Repeat, Wallet, Package } from "lucide-react";
+import { Eye, Heart, Share2, TrendingUp, Search, MousePointerClick, ShoppingBag, Repeat, Wallet, Package, MessageCircle, Tag } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
@@ -16,6 +16,7 @@ import {
   getProductPerformanceBreakdown,
   getInventoryIntelligence,
   getCustomerInsights,
+  getMessagingAnalytics,
 } from "@/services/insights/seller-insight.service";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
@@ -38,6 +39,7 @@ export default async function SellerAnalyticsPage() {
     productPerformance,
     inventory,
     customerInsights,
+    messagingAnalytics,
   ] = await Promise.all([
     getSellerAnalytics(profile.id),
     getMostViewedProducts(profile.id, 5),
@@ -49,6 +51,7 @@ export default async function SellerAnalyticsPage() {
     getProductPerformanceBreakdown(profile.id, 5),
     getInventoryIntelligence(profile.id),
     getCustomerInsights(profile.id),
+    getMessagingAnalytics(profile.id),
   ]);
 
   const revenueBars = revenueHistory.slice(-7).map((entry) => ({
@@ -308,6 +311,28 @@ export default async function SellerAnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-accent" strokeWidth={2} />
+            Messaging & offers
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label="Response rate" value={`${(messagingAnalytics.responseRate * 100).toFixed(0)}%`} />
+          <StatCard
+            label="Avg. reply time"
+            value={messagingAnalytics.averageReplyTimeHours !== null ? `${messagingAnalytics.averageReplyTimeHours.toFixed(1)}h` : "—"}
+          />
+          <StatCard label="Message → purchase" value={`${(messagingAnalytics.messageToPurchaseRate * 100).toFixed(0)}%`} />
+          <StatCard
+            label="Offer acceptance"
+            icon={Tag}
+            value={messagingAnalytics.offerAcceptanceRate !== null ? `${(messagingAnalytics.offerAcceptanceRate * 100).toFixed(0)}%` : "—"}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

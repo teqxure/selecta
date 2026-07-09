@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
-import { confirmDeliveryAction } from "./actions";
+import { confirmDeliveryAction, startOrderSupportConversationAction } from "./actions";
 import { DisputeForm } from "./dispute-form";
 import { ReviewForm } from "./review-form";
 
@@ -153,6 +153,21 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
         </CardHeader>
         <CardContent>
           <OrderTimeline entries={order.statusHistory} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Need help with this order?</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {Array.from(new Map(order.items.map((item) => [item.product.seller.id, item.product.seller])).values()).map((seller) => (
+            <form key={seller.id} action={startOrderSupportConversationAction.bind(null, order.id, seller.id)}>
+              <Button type="submit" variant="outline" size="sm">
+                Message {seller.storeName ?? seller.businessName}
+              </Button>
+            </form>
+          ))}
         </CardContent>
       </Card>
 

@@ -22,6 +22,7 @@ import {
   Wallet2,
   Sparkles,
   BrainCircuit,
+  ShieldAlert,
 } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
@@ -50,6 +51,7 @@ const ADMIN_NAV_GROUPS = [
       { label: "Verification queue", href: ROUTES.admin.verificationQueue, icon: ShieldCheck, permission: "vendors.verify" },
       { label: "Orders", href: ROUTES.admin.orders, icon: ClipboardList, permission: "orders.manage" },
       { label: "Disputes", href: ROUTES.admin.disputes, icon: Gavel, permission: "disputes.handle" },
+      { label: "Trust & Safety", href: ROUTES.admin.trustDashboard, icon: ShieldAlert, permission: "support.messages" },
     ],
   },
   {

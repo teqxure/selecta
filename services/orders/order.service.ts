@@ -11,6 +11,8 @@ import type { OrderStatus } from "@/generated/prisma/enums";
 interface OrderLineInput {
   productId: string;
   quantity: number;
+  /** Set only for a checkout created from an accepted Offer negotiation — the unit price is re-derived from that offer's own record below, never trusted from the caller. */
+  offerId?: string;
 }
 
 export async function createOrder(buyerId: string, lines: OrderLineInput[], shippingAddress: Address) {
@@ -25,12 +27,27 @@ export async function createOrder(buyerId: string, lines: OrderLineInput[], ship
       throw new ValidationError("One or more products in this order no longer exist");
     }
 
+    const offerLines = lines.filter((line) => line.offerId);
+    const offers =
+      offerLines.length > 0
+        ? await tx.offer.findMany({ where: { id: { in: offerLines.map((line) => line.offerId!) } } })
+        : [];
+
+    const unitPriceFor = (line: OrderLineInput, product: (typeof products)[number]) => {
+      if (!line.offerId) return product.price;
+      const offer = offers.find((o) => o.id === line.offerId);
+      if (!offer || offer.buyerId !== buyerId || offer.productId !== line.productId || offer.status !== "ACCEPTED" || offer.orderId) {
+        throw new ValidationError("This offer is no longer valid for checkout");
+      }
+      return offer.amount;
+    };
+
     const totalAmount = lines.reduce((sum, line) => {
       const product = products.find((p) => p.id === line.productId)!;
-      return sum + Number(product.price) * line.quantity;
+      return sum + Number(unitPriceFor(line, product)) * line.quantity;
     }, 0);
 
-    return tx.order.create({
+    const created = await tx.order.create({
       data: {
         buyerId,
         totalAmount,
@@ -41,13 +58,19 @@ export async function createOrder(buyerId: string, lines: OrderLineInput[], ship
             return {
               productId: line.productId,
               quantity: line.quantity,
-              unitPrice: product.price,
+              unitPrice: unitPriceFor(line, product),
             };
           }),
         },
       },
       include: { items: { include: { product: { include: { seller: true } } } } },
     });
+
+    for (const line of offerLines) {
+      await tx.offer.update({ where: { id: line.offerId! }, data: { orderId: created.id } });
+    }
+
+    return created;
   });
 
   const itemsBySeller = new Map<string, { title: string; storeName: string }[]>();

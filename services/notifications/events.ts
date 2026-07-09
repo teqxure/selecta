@@ -44,6 +44,11 @@ export const NOTIFICATION_EVENTS = {
   BOOST_PERFORMANCE_REPORT: { notificationType: "SYSTEM", category: "sellerUpdates" },
   SELLER_WEEKLY_REPORT: { notificationType: "SYSTEM", category: "sellerUpdates" },
   SELLER_MONTHLY_REPORT: { notificationType: "SYSTEM", category: "sellerUpdates" },
+  NEW_MESSAGE: { notificationType: "MESSAGE", category: "orderUpdates" },
+  OFFER_RECEIVED: { notificationType: "MESSAGE", category: "orderUpdates", emailTemplateKey: "offer_received" },
+  OFFER_ACCEPTED: { notificationType: "MESSAGE", category: "orderUpdates", emailTemplateKey: "offer_accepted" },
+  OFFER_REJECTED: { notificationType: "MESSAGE", category: "orderUpdates" },
+  MESSAGE_FLAGGED: { notificationType: "SYSTEM", category: "admin", emailTemplateKey: "message_flagged" },
 } as const satisfies Record<string, NotificationEventConfig>;
 
 export type NotificationEventName = keyof typeof NOTIFICATION_EVENTS;

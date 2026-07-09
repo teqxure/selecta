@@ -140,6 +140,11 @@ export default async function SellerDashboardPage() {
                 </div>
               ))}
             </div>
+            {health.trustPenalty > 0 && (
+              <p className="text-xs text-amber-700">
+                -{health.trustPenalty} pts for repeated contact-sharing attempts. Keep buyer conversations on Selecta to recover this.
+              </p>
+            )}
           </CardContent>
         </Card>
 

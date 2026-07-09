@@ -107,4 +107,19 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplateDefault> = {
     subject: "Your boost campaign for {{productTitle}} has ended",
     bodyHtml: `<p>Hi {{customerName}},</p><p>Your boost campaign for <strong>{{productTitle}}</strong> has ended. Check your Marketing Center for the full performance report.</p>`,
   },
+  offer_received: {
+    label: "Offer received",
+    subject: "New offer of {{amount}} on {{productTitle}}",
+    bodyHtml: `<p>Hi {{customerName}},</p><p>You've received an offer of <strong>{{amount}}</strong> on <strong>{{productTitle}}</strong>. Reply in Messages to accept, reject, or counter.</p>`,
+  },
+  offer_accepted: {
+    label: "Offer accepted",
+    subject: "Your offer on {{productTitle}} was accepted",
+    bodyHtml: `<p>Hi {{customerName}},</p><p>Your offer of <strong>{{amount}}</strong> on <strong>{{productTitle}}</strong> was accepted. Complete checkout to secure it.</p>`,
+  },
+  message_flagged: {
+    label: "Message flagged for review",
+    subject: "A conversation was flagged for review",
+    bodyHtml: `<p>{{message}}</p>`,
+  },
 };

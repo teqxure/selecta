@@ -5,6 +5,7 @@ import { notify } from "@/services/notifications/notify.service";
 import { getSellerAnalytics } from "@/services/analytics/analytics.service";
 import { listCustomersForSeller } from "@/services/orders/order.service";
 import { getProductQualityScoresForSeller, getBoostRecommendationsForSeller } from "@/services/insights/product-insight.service";
+import { getViolationCount, getTrustPenalty } from "@/services/messaging/contact-safety.service";
 
 /**
  * The seller-facing half of the intelligence foundation — reads entirely
@@ -147,6 +148,7 @@ export interface StoreHealthResult {
   label: "Excellent" | "Good" | "Fair" | "Needs improvement";
   categories: { profile: number; products: number; customerExperience: number };
   breakdown: StoreHealthBreakdown;
+  trustPenalty: number;
 }
 
 /** Weights sum to 100 — see schema.prisma's Monetization section for the sibling pattern (Super Admin-configurable pricing); these weights are fixed in code since they're a scoring rubric, not a business price. */
@@ -204,13 +206,14 @@ async function getResponseSpeedScore(sellerId: string): Promise<number> {
 export async function getStoreHealthScore(sellerId: string): Promise<StoreHealthResult> {
   const profile = await db.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } });
 
-  const [qualityScores, statusCounts, transactions, disputeCount, responseSpeed, reviews] = await Promise.all([
+  const [qualityScores, statusCounts, transactions, disputeCount, responseSpeed, reviews, violationCount] = await Promise.all([
     getProductQualityScoresForSeller(sellerId),
     db.product.groupBy({ by: ["status"], where: { sellerId }, _count: true }),
     db.transaction.findMany({ where: { sellerId }, select: { status: true } }),
     db.dispute.count({ where: { sellerId } }),
     getResponseSpeedScore(sellerId),
     db.review.findMany({ where: { product: { sellerId } }, select: { rating: true } }),
+    getViolationCount(profile.userId),
   ]);
 
   const profileCompleteness = scoreProfileCompleteness(profile);
@@ -245,21 +248,81 @@ export async function getStoreHealthScore(sellerId: string): Promise<StoreHealth
     customerSatisfaction,
   };
 
-  const overall = Math.round(
+  const weightedScore = Math.round(
     (Object.keys(breakdown) as (keyof StoreHealthBreakdown)[]).reduce((sum, key) => sum + breakdown[key] * (HEALTH_WEIGHTS[key] / 100), 0),
   );
+  // A single flagged message costs nothing — only a genuine pattern of
+  // repeated contact-sharing attempts (Phase 6) pulls the score down.
+  const trustPenalty = getTrustPenalty(violationCount);
+  const overall = Math.max(0, weightedScore - trustPenalty);
 
   const categories = {
     profile: Math.round(profileCompleteness),
     products: Math.round((productQuality * 20 + productAvailability * 10) / 30),
-    customerExperience: Math.round(
-      (responseSpeed * 10 + orderCompletionRate * 15 + reviewScore * 15 + disputeRate * 10 + customerSatisfaction * 5) / 55,
+    customerExperience: Math.max(
+      0,
+      Math.round((responseSpeed * 10 + orderCompletionRate * 15 + reviewScore * 15 + disputeRate * 10 + customerSatisfaction * 5) / 55 - trustPenalty),
     ),
   };
 
   const label: StoreHealthResult["label"] = overall >= 85 ? "Excellent" : overall >= 70 ? "Good" : overall >= 50 ? "Fair" : "Needs improvement";
 
-  return { overall, label, categories, breakdown };
+  return { overall, label, categories, breakdown, trustPenalty };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Messaging analytics
+// ---------------------------------------------------------------------------
+
+export interface MessagingAnalytics {
+  totalConversations: number;
+  averageReplyTimeHours: number | null;
+  responseRate: number;
+  messageToPurchaseRate: number;
+  offerAcceptanceRate: number | null;
+}
+
+export async function getMessagingAnalytics(sellerId: string): Promise<MessagingAnalytics> {
+  const seller = await db.sellerProfile.findUniqueOrThrow({ where: { id: sellerId }, select: { userId: true } });
+  const conversations = await db.conversation.findMany({
+    where: { sellerProfileId: sellerId },
+    include: { messages: { orderBy: { createdAt: "asc" }, select: { senderId: true, createdAt: true } } },
+  });
+
+  let repliedCount = 0;
+  const replyTimesMs: number[] = [];
+  for (const conversation of conversations) {
+    if (conversation.messages.some((m) => m.senderId === seller.userId)) repliedCount += 1;
+    for (let i = 0; i < conversation.messages.length - 1; i++) {
+      const message = conversation.messages[i];
+      const next = conversation.messages[i + 1];
+      if (message.senderId !== seller.userId && next.senderId === seller.userId) {
+        replyTimesMs.push(next.createdAt.getTime() - message.createdAt.getTime());
+      }
+    }
+  }
+
+  const responseRate = conversations.length > 0 ? repliedCount / conversations.length : 0;
+  const averageReplyTimeHours = replyTimesMs.length > 0 ? replyTimesMs.reduce((sum, ms) => sum + ms, 0) / replyTimesMs.length / 3_600_000 : null;
+
+  const buyerIds = Array.from(new Set(conversations.map((c) => c.buyerId)));
+  const purchasingBuyers =
+    buyerIds.length > 0
+      ? await db.order.findMany({ where: { buyerId: { in: buyerIds }, items: { some: { product: { sellerId } } } }, select: { buyerId: true }, distinct: ["buyerId"] })
+      : [];
+  const messageToPurchaseRate = buyerIds.length > 0 ? purchasingBuyers.length / buyerIds.length : 0;
+
+  const offers = await db.offer.findMany({ where: { sellerId }, select: { status: true } });
+  const decidedOffers = offers.filter((o) => o.status === "ACCEPTED" || o.status === "REJECTED");
+  const offerAcceptanceRate = decidedOffers.length > 0 ? decidedOffers.filter((o) => o.status === "ACCEPTED").length / decidedOffers.length : null;
+
+  return {
+    totalConversations: conversations.length,
+    averageReplyTimeHours,
+    responseRate,
+    messageToPurchaseRate,
+    offerAcceptanceRate,
+  };
 }
 
 // ---------------------------------------------------------------------------

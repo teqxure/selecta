@@ -71,6 +71,8 @@ export const ROUTES = {
     revenue: "/admin/revenue",
     growthPartners: "/admin/growth-partners",
     marketplaceIntelligence: "/admin/marketplace-intelligence",
+    trustDashboard: "/admin/trust",
+    conversation: (id: string) => `/admin/trust/conversations/${id}`,
   },
   notifications: "/notifications",
 } as const;

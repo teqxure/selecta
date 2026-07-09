@@ -8,6 +8,7 @@ import { getOrCreateConversation } from "@/services/messaging/conversation.servi
 import { ROUTES } from "@/lib/constants/routes";
 import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
 import { sanitizeText } from "@/lib/security/sanitize";
+import { DISPUTE_TYPE_LABELS } from "@/lib/constants/disputes";
 import type { DisputeType } from "@/generated/prisma/enums";
 import type { OrderStatus } from "@/generated/prisma/enums";
 
@@ -52,7 +53,7 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
 
   if (order.status !== "DISPUTED") {
     await transitionOrderStatus(input.orderId, { type: "BUYER", userId: buyerId }, "DISPUTED", {
-      note: `Dispute opened: ${input.type}`,
+      note: `Dispute opened: ${DISPUTE_TYPE_LABELS[input.type]}`,
       skipNotification: true,
     });
   }
@@ -85,7 +86,7 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
 
   await alertAdmins(
     "New dispute opened",
-    `A dispute (${input.type}) was opened on order #${orderRef} against ${sellerProfile.businessName}.`,
+    `A dispute (${DISPUTE_TYPE_LABELS[input.type]}) was opened on order #${orderRef} against ${sellerProfile.businessName}.`,
     { actionUrl: `/admin/disputes`, metadata: { disputeId: dispute.id, orderId: order.id } },
   );
 

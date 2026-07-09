@@ -5,6 +5,7 @@ import { ROUTES } from "@/lib/constants/routes";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { DISPUTE_TYPE_LABELS } from "@/lib/constants/disputes";
 import { Gavel } from "lucide-react";
 
 export default async function AdminDisputesPage() {
@@ -28,7 +29,7 @@ export default async function AdminDisputesPage() {
                 <CardContent className="flex items-center justify-between p-4">
                   <div>
                     <p className="font-medium text-secondary-foreground">
-                      {dispute.type.replaceAll("_", " ")} · Order #{dispute.orderId.slice(-8)}
+                      {DISPUTE_TYPE_LABELS[dispute.type]} · Order #{dispute.orderId.slice(-8)}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {dispute.buyer.firstName} {dispute.buyer.lastName} vs.{" "}

@@ -4,6 +4,7 @@ import { getDisputeForAdmin } from "@/services/disputes/dispute.service";
 import { isAppError } from "@/lib/errors";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
+import { DISPUTE_TYPE_LABELS } from "@/lib/constants/disputes";
 import { Button } from "@/components/ui/Button";
 import { markUnderReviewAction, resolveWithRefundAction, resolveWithReleaseAction, closeWithoutActionAction } from "./actions";
 import { ResolveForm } from "./resolve-form";
@@ -30,7 +31,7 @@ export default async function AdminDisputeDetailPage({ params }: { params: Promi
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selecta HQ</p>
           <h1 className="font-display text-2xl font-semibold text-foreground">
-            {dispute.type.replaceAll("_", " ")} — Order #{dispute.orderId.slice(-8)}
+            {DISPUTE_TYPE_LABELS[dispute.type]} — Order #{dispute.orderId.slice(-8)}
           </h1>
         </div>
         <Badge tone={STATUS_TONE[dispute.status] ?? "neutral"}>{dispute.status.replaceAll("_", " ")}</Badge>

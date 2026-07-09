@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { notify } from "@/services/notifications/notify.service";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
-import { Role, UserStatus } from "@/lib/constants/roles";
+import { Role, ROLE_LABELS, UserStatus } from "@/lib/constants/roles";
 import { sanitizeOptionalText } from "@/lib/security/sanitize";
 import { PAGINATION } from "@/lib/constants/app";
 import type { RegisterInput } from "@/lib/validators/auth";
@@ -217,9 +217,9 @@ export async function changeUserRole(actorId: string, targetUserId: string, newR
     event: "SECURITY_ALERT",
     userId: updated.id,
     title: "Your account role changed",
-    message: `Your Selecta account role changed from ${previousRole} to ${newRole}.`,
+    message: `Your Selecta account role changed from ${ROLE_LABELS[previousRole]} to ${ROLE_LABELS[newRole]}.`,
     metadata: { fromRole: previousRole, toRole: newRole },
-    emailVariables: { message: `Your account role changed from ${previousRole} to ${newRole}.` },
+    emailVariables: { message: `Your account role changed from ${ROLE_LABELS[previousRole]} to ${ROLE_LABELS[newRole]}.` },
   });
 
   // A Super-Admin-tier transition (either direction) is the highest-stakes

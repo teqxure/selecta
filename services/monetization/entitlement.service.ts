@@ -2,7 +2,20 @@ import "server-only";
 import { db } from "@/lib/db";
 import { ForbiddenError } from "@/lib/errors";
 import { getEffectiveLimits, type EffectiveLimits } from "@/services/monetization/subscription.service";
+import { isFeatureEnabled } from "@/services/platform/feature-flags.service";
 import { ROUTES } from "@/lib/constants/routes";
+
+/**
+ * A global kill switch, independent of any plan's `PlanFeature` rows —
+ * reuses the existing generic `FeatureFlag` system (already editable from
+ * /admin/feature-flags, no new admin UI needed). Semantics deliberately
+ * inverted from a normal flag ("missing = disabled" is this codebase's
+ * convention): missing/false here means AI works normally per-plan;
+ * explicitly enabling this flag force-disables every AI feature for every
+ * seller on every plan at once — an emergency switch for a cost spike or
+ * an incident, not something a seller's plan can override.
+ */
+export const AI_KILL_SWITCH_KEY = "ai_features_disabled";
 
 /**
  * The single place every premium feature checks a plan — never
@@ -48,6 +61,12 @@ function coreAccess(limits: EffectiveLimits, feature: FeatureKey): boolean {
 
 export async function canAccess(sellerId: string, feature: FeatureKey): Promise<AccessResult> {
   const limits = await getEffectiveLimits(sellerId);
+
+  // The global kill switch overrides everything, including a plan that
+  // explicitly has this feature enabled — checked first, on purpose.
+  if (feature.startsWith("AI_") && (await isFeatureEnabled(AI_KILL_SWITCH_KEY))) {
+    return { allowed: false, limits, reason: "AI features are temporarily turned off platform-wide. Please try again later." };
+  }
 
   // No plan configured at all yet (first-run safety, same sentinel
   // getEffectiveLimits itself returns) — never block before a Super Admin

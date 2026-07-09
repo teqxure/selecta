@@ -33,6 +33,7 @@ export const ROUTES = {
     wallet: "/seller/wallet",
     withdrawals: "/seller/withdrawals",
     settings: "/seller/settings",
+    verification: "/seller/verification",
     customers: "/seller/customers",
     messages: "/seller/messages",
     message: (id: string) => `/seller/messages/${id}`,

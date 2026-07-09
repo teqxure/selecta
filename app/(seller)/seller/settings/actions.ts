@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireActiveRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { updateSellerSettingsSchema } from "@/lib/validators/profile";
@@ -9,7 +8,7 @@ import { getSellerProfileByUserId, updateStoreSettings } from "@/services/seller
 import { switchToBuyerMode } from "@/services/users/role-switch.service";
 import { reissueSessionCookieWithRole } from "@/lib/auth/session";
 import { ROUTES } from "@/lib/constants/routes";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 
 export interface SettingsActionState {
   error?: string;
@@ -23,7 +22,7 @@ export async function updateSellerSettingsAction(
   const user = await requireActiveRole(Role.SELLER);
 
   const parsed = updateSellerSettingsSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   try {
     const profile = await getSellerProfileByUserId(user.id);

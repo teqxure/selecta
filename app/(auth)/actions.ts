@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { loginSchema, registerSchema } from "@/lib/validators/auth";
 import { createUser, getUserByEmail, recordLoginHistory } from "@/services/users/user.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
@@ -9,7 +8,7 @@ import { establishSession, revokeSession } from "@/services/users/session.servic
 import { notify } from "@/services/notifications/notify.service";
 import { verifyPassword, DUMMY_PASSWORD_HASH } from "@/lib/auth/password";
 import { getSession, clearSessionCookie } from "@/lib/auth/session";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 import { checkLoginRateLimit } from "@/lib/security/rate-limit";
 import { getRequestMeta } from "@/lib/security/request-meta";
 import { ROUTES } from "@/lib/constants/routes";
@@ -22,7 +21,7 @@ export interface AuthActionState {
 export async function registerAction(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
   const parsed = registerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { error: z.prettifyError(parsed.error) };
+    return { error: formatZodError(parsed.error) };
   }
 
   const { ipAddress, userAgent } = await getRequestMeta();
@@ -48,7 +47,7 @@ export async function registerAction(_prevState: AuthActionState, formData: Form
 export async function loginAction(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
   const parsed = loginSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { error: z.prettifyError(parsed.error) };
+    return { error: formatZodError(parsed.error) };
   }
 
   const { email, password, rememberMe } = parsed.data;

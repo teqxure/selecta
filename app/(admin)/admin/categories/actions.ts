@@ -1,11 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requirePermission } from "@/lib/auth/rbac";
 import { categorySchema } from "@/lib/validators/category";
 import { createCategory, deleteCategory, setCategoryActive, updateCategory } from "@/services/categories/category.service";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
 
 export interface CategoryActionState {
@@ -19,7 +18,7 @@ export async function createCategoryAction(
   await requirePermission("content.manage");
 
   const parsed = categorySchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   try {
     await createCategory(parsed.data);
@@ -40,7 +39,7 @@ export async function updateCategoryAction(
   await requirePermission("content.manage");
 
   const parsed = categorySchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   try {
     await updateCategory(categoryId, parsed.data);

@@ -1,14 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireActiveRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { storeSetupSchema } from "@/lib/validators/onboarding";
 import { completeStoreSetupStep, getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { updateNotificationPreferences } from "@/services/notifications/preferences.service";
 import { ROUTES } from "@/lib/constants/routes";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 import type { OnboardingActionState } from "../personal/actions";
 
 export async function submitStoreSetupAction(
@@ -35,7 +34,7 @@ export async function submitStoreSetupAction(
     sellerUpdatesOptIn: formData.get("sellerUpdatesOptIn"),
     agreementAccepted: formData.get("agreementAccepted"),
   });
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   try {
     const profile = await getSellerProfileByUserId(user.id);

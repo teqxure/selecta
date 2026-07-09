@@ -2,14 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireActiveRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { productPricingSchema } from "@/lib/validators/product";
 import { updateProductPricing, getOwnedProductWithDetails } from "@/services/products/product.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { ROUTES } from "@/lib/constants/routes";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 import type { ProductWizardActionState } from "../../new/actions";
 
 export async function updateProductPricingAction(
@@ -25,7 +24,7 @@ export async function updateProductPricingAction(
     price: raw.price ? Number(raw.price) : undefined,
     discountPrice: raw.discountPrice ? Number(raw.discountPrice) : undefined,
   });
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   let isDraft = false;
   try {

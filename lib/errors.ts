@@ -1,3 +1,14 @@
+import type { ZodError } from "zod";
+
+/**
+ * One clean, human message for end users — never `z.prettifyError`'s raw
+ * "✖ message\n  → at fieldName" output, which leaks internal schema/field
+ * names (e.g. "at businessPhotoUrl") into user-facing text.
+ */
+export function formatZodError(error: ZodError): string {
+  return error.issues[0]?.message ?? "Invalid input";
+}
+
 /**
  * Base class for all expected, handled errors. Anything else that throws is
  * treated as an unexpected 500 and logged with full detail — see logger.ts.

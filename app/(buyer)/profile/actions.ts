@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireActiveUser, requireActiveRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { updateBuyerProfileSchema, addressSchema } from "@/lib/validators/profile";
@@ -12,7 +11,7 @@ import { updateNotificationPreferences } from "@/services/notifications/preferen
 import { switchToSellerMode } from "@/services/users/role-switch.service";
 import { dismissProfileNudge } from "@/services/users/profile-nudge.service";
 import { reissueSessionCookieWithRole } from "@/lib/auth/session";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
 
 export interface ProfileActionState {
@@ -27,7 +26,7 @@ export async function updateProfileAction(
   const user = await requireActiveUser();
 
   const parsed = updateBuyerProfileSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   await updateBuyerProfile(user.id, parsed.data);
   revalidatePath(ROUTES.profile);
@@ -41,7 +40,7 @@ export async function addAddressAction(
   const user = await requireActiveUser();
 
   const parsed = addressSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   await createAddress(user.id, parsed.data);
   revalidatePath(ROUTES.profile);

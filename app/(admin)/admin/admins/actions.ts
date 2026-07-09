@@ -1,13 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role, UserStatus } from "@/lib/constants/roles";
 import { createAdminSchema, updateAdminPermissionsSchema } from "@/lib/validators/admin-management";
 import { createAdmin, updateAdminPermissions, setAdminStatus } from "@/services/admin/admin-management.service";
 import { getRequestMeta } from "@/lib/security/request-meta";
-import { isAppError, ValidationError } from "@/lib/errors";
+import { formatZodError, isAppError, ValidationError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
 
 export interface CreateAdminActionState {
@@ -24,7 +23,7 @@ export async function createAdminAction(_prevState: CreateAdminActionState, form
     password: formData.get("password"),
     permissions: formData.getAll("permissions"),
   });
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   try {
     const { ipAddress } = await getRequestMeta();

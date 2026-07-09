@@ -1,14 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireActiveRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { productImagesSchema } from "@/lib/validators/product";
 import { createDraftProduct } from "@/services/products/product.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { ROUTES } from "@/lib/constants/routes";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 
 export interface ProductWizardActionState {
   error?: string;
@@ -28,7 +27,7 @@ export async function createDraftProductAction(
   }
 
   const parsed = productImagesSchema.safeParse({ images });
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   let productId: string;
   try {

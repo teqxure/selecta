@@ -167,6 +167,23 @@ export async function submitVerification(
   });
 }
 
+/**
+ * Lets a seller reach the dashboard without submitting verification docs
+ * yet — completes onboarding, but deliberately creates no `SellerVerification`
+ * row, so `listPendingVerifications` (which only ever reads that table)
+ * never shows this seller in the admin queue until they actually submit via
+ * `submitVerification` later, from the dashboard reminder.
+ */
+export async function skipVerificationStep(userId: string, sellerProfileId: string) {
+  const { count } = await db.sellerProfile.updateMany({
+    where: { id: sellerProfileId, userId },
+    data: { onboardingStep: 4, onboardingCompletedAt: new Date() },
+  });
+  if (count === 0) throw new NotFoundError("Seller profile");
+
+  return db.sellerProfile.findUniqueOrThrow({ where: { id: sellerProfileId } });
+}
+
 export async function getSellerDashboardStats(sellerProfileId: string, userId: string) {
   const [activeListings, wallet, distinctOrders] = await Promise.all([
     db.product.count({ where: { sellerId: sellerProfileId, status: "ACTIVE" } }),

@@ -2,14 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireActiveRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { productDetailsSchema } from "@/lib/validators/product";
 import { updateProductDetails, getOwnedProductWithDetails } from "@/services/products/product.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { ROUTES } from "@/lib/constants/routes";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 import type { ProductWizardActionState } from "../../new/actions";
 
 export async function updateProductDetailsAction(
@@ -20,7 +19,7 @@ export async function updateProductDetailsAction(
   const user = await requireActiveRole(Role.SELLER);
 
   const parsed = productDetailsSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   let isDraft = false;
   try {

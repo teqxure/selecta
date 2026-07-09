@@ -1,13 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireActiveRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { personalInfoSchema } from "@/lib/validators/onboarding";
 import { completePersonalInfoStep, getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { ROUTES } from "@/lib/constants/routes";
-import { isAppError } from "@/lib/errors";
+import { formatZodError, isAppError } from "@/lib/errors";
 
 export interface OnboardingActionState {
   error?: string;
@@ -20,7 +19,7 @@ export async function submitPersonalInfoAction(
   const user = await requireActiveRole(Role.SELLER);
 
   const parsed = personalInfoSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: z.prettifyError(parsed.error) };
+  if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   try {
     const profile = await getSellerProfileByUserId(user.id);

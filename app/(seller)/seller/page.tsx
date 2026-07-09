@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Wallet, ShoppingCart, Package, Eye, MessageCircle, TrendingUp, PlusCircle, Banknote } from "lucide-react";
+import { Wallet, ShoppingCart, Package, Eye, MessageCircle, TrendingUp, PlusCircle, Banknote, ShieldAlert } from "lucide-react";
 import { requireAuth } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { ROUTES } from "@/lib/constants/routes";
@@ -91,6 +91,27 @@ export default async function SellerDashboardPage() {
         </div>
         <Badge tone={STATUS_TONE[profile.verificationStatus]}>{profile.verificationStatus}</Badge>
       </div>
+
+      {!profile.verification && (
+        <Card className="border-accent/30 bg-accent/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-accent" strokeWidth={2} />
+              <div>
+                <p className="text-sm font-medium text-foreground">Get verified to build buyer trust</p>
+                <p className="text-xs text-muted-foreground">
+                  Verified stores rank higher in search and show up when buyers filter for verified sellers only.
+                </p>
+              </div>
+            </div>
+            <Link href={ROUTES.seller.verification}>
+              <Button variant="accent" size="sm">
+                Get verified
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Link href={ROUTES.seller.newProduct}>

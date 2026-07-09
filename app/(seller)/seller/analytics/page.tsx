@@ -1,8 +1,11 @@
 import Image from "next/image";
-import { Eye, Heart, Share2, TrendingUp, Search, MousePointerClick, ShoppingBag, Repeat, Wallet, Package, MessageCircle, Tag } from "lucide-react";
+import { Eye, Heart, Share2, TrendingUp, Search, MousePointerClick, ShoppingBag, Repeat, Wallet, Package, MessageCircle, Tag, Lock } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
+import { canAccess } from "@/services/monetization/entitlement.service";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ROUTES } from "@/lib/constants/routes";
 import {
   getSellerAnalytics,
   getMostViewedProducts,
@@ -27,6 +30,21 @@ import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 export default async function SellerAnalyticsPage() {
   const session = await requireRole(Role.SELLER);
   const profile = await getSellerProfileByUserId(session.userId);
+
+  const access = await canAccess(profile.id, "ANALYTICS_ACCESS");
+  if (!access.allowed) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="font-display text-2xl font-semibold text-foreground">Analytics</h1>
+        <EmptyState
+          icon={Lock}
+          title="Analytics isn't included in your plan"
+          description={access.reason ?? `Upgrade from ${access.limits.planName} to unlock analytics.`}
+          action={{ label: "Upgrade in Growth Center", href: ROUTES.seller.growth }}
+        />
+      </div>
+    );
+  }
 
   const [
     analytics,

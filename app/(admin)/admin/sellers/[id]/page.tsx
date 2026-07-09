@@ -4,6 +4,7 @@ import { currentUser } from "@/lib/auth/current-user";
 import { Role } from "@/lib/constants/roles";
 import { db } from "@/lib/db";
 import { getSellerAnalytics } from "@/services/analytics/analytics.service";
+import { getEffectiveLimits } from "@/services/monetization/subscription.service";
 import { listAgents } from "@/services/sellers/seller.service";
 import { getProductStatusCounts } from "@/services/products/product.service";
 import { getSellerBalances } from "@/services/payments/payment.service";
@@ -22,12 +23,13 @@ export default async function AdminSellerDetailPage({ params }: { params: Promis
   const seller = await db.sellerProfile.findUnique({ where: { id }, include: { user: true, agent: true } });
   if (!seller) notFound();
 
-  const [analytics, statusCounts, agents, viewer, balances] = await Promise.all([
+  const [analytics, statusCounts, agents, viewer, balances, limits] = await Promise.all([
     getSellerAnalytics(seller.id),
     getProductStatusCounts(seller.id),
     listAgents(),
     currentUser(),
     getSellerBalances(seller.id),
+    getEffectiveLimits(seller.id),
   ]);
 
   const isSuspended = seller.verificationStatus === "SUSPENDED";
@@ -46,7 +48,10 @@ export default async function AdminSellerDetailPage({ params }: { params: Promis
             {seller.user.firstName} {seller.user.lastName} · {seller.user.email}
           </p>
         </div>
-        <Badge tone={STATUS_TONE[seller.verificationStatus]}>{seller.verificationStatus}</Badge>
+        <div className="flex items-center gap-2">
+          {limits.hasPrioritySupport && <Badge tone="accent">Priority support</Badge>}
+          <Badge tone={STATUS_TONE[seller.verificationStatus]}>{seller.verificationStatus}</Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

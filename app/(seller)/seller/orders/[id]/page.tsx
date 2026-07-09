@@ -9,6 +9,8 @@ import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
+import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ROUTES } from "@/lib/constants/routes";
 import { advanceOrderStatusAction, setDeliveryDetailsAction } from "./actions";
 import { getAllowedNextStatuses } from "@/services/orders/order-state-machine";
 
@@ -36,15 +38,12 @@ export default async function SellerOrderDetailPage({ params }: { params: Promis
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-foreground">Order #{order.id.slice(-8)}</h1>
-          <p className="text-sm text-muted-foreground">
-            {order.buyer.firstName} {order.buyer.lastName}
-          </p>
-        </div>
-        <Badge tone={STATUS_TONE[order.status]}>{order.status.replaceAll("_", " ")}</Badge>
-      </div>
+      <PageHeader
+        breadcrumbs={[{ label: "Orders", href: ROUTES.seller.orders }, { label: `#${order.id.slice(-8)}` }]}
+        title={`Order #${order.id.slice(-8)}`}
+        description={`${order.buyer.firstName} ${order.buyer.lastName}`}
+        actions={<Badge tone={STATUS_TONE[order.status]}>{order.status.replaceAll("_", " ")}</Badge>}
+      />
 
       {nextOptions.length > 0 && (
         <Card>

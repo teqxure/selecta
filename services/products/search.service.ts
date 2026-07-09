@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
 import { createNotification } from "@/services/notifications/notification.service";
 import { getActiveBoostProductIds } from "@/services/monetization/boost.service";
+import { getFeaturedStoreSellerIds } from "@/services/monetization/entitlement.service";
 import { PAGINATION } from "@/lib/constants/app";
 import type { SearchFilters } from "@/lib/validators/product";
 import type { PaginatedResult } from "@/types";
@@ -267,12 +268,16 @@ function buildSearchWhere(filters: SearchFilters): Prisma.ProductWhereInput {
  */
 const BOOST_SCORE_BONUS = 25;
 
+/** A real ranking lift for a plan's "featured store" perk — modest, sitting between the verified-seller trust bonus and admin-curated isFeatured, never enough alone to beat a genuinely strong organic result. */
+const FEATURED_STORE_SCORE_BONUS = 12;
+
 function scoreCandidate(
   product: ProductRecord,
   filters: SearchFilters,
   now: number,
   recentViewCounts: Map<string, number>,
   boostedProductIds: Set<string>,
+  featuredStoreSellerIds: Set<string>,
 ) {
   let score = 0;
 
@@ -301,6 +306,7 @@ function scoreCandidate(
   score += Math.min(Math.log10(product.likeCount + 1) * 6, 15);
   if (product.isFeatured) score += 10;
   if (boostedProductIds.has(product.id)) score += BOOST_SCORE_BONUS;
+  if (featuredStoreSellerIds.has(product.sellerId)) score += FEATURED_STORE_SCORE_BONUS;
 
   return score;
 }
@@ -351,9 +357,10 @@ export async function searchProducts(
     }
 
     const boostedProductIds = await getActiveBoostProductIds(candidates.map((c) => c.id));
+    const featuredStoreSellerIds = await getFeaturedStoreSellerIds([...new Set(candidates.map((c) => c.sellerId))]);
     const now = Date.now();
     const ranked = candidates
-      .map((product) => ({ product, score: scoreCandidate(product, filters, now, recentViewCounts, boostedProductIds) }))
+      .map((product) => ({ product, score: scoreCandidate(product, filters, now, recentViewCounts, boostedProductIds, featuredStoreSellerIds) }))
       .sort((a, b) => b.score - a.score)
       .map((r) => r.product);
 

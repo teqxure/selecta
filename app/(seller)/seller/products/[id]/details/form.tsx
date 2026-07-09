@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { updateProductDetailsAction } from "./actions";
+import { useActionState, useRef, useState, useTransition } from "react";
+import { Sparkles, Loader2 } from "lucide-react";
+import { updateProductDetailsAction, generateProductDescriptionAction } from "./actions";
 import type { ProductWizardActionState } from "../../new/actions";
 import { CONDITION_GRADE_LABELS, GENDER_LABELS } from "@/lib/validators/product";
 import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -46,22 +48,46 @@ export function DetailsForm({
   const [categoryId, setCategoryId] = useState(defaults.categoryId);
   const subcategories = categories.find((category) => category.id === categoryId)?.children ?? [];
 
+  const formRef = useRef<HTMLFormElement>(null);
+  const [description, setDescription] = useState(defaults.description);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [isGenerating, startGenerating] = useTransition();
+
+  function handleGenerate() {
+    if (!formRef.current) return;
+    const formData = new FormData(formRef.current);
+    setAiError(null);
+    startGenerating(async () => {
+      const result = await generateProductDescriptionAction(productId, formData);
+      if (result.error) setAiError(result.error);
+      else setDescription(result.description ?? "");
+    });
+  }
+
   return (
     <Card>
       <CardContent className="p-5">
-        <form action={formAction} className="flex flex-col gap-4">
+        <form ref={formRef} action={formAction} className="flex flex-col gap-4">
           <Input name="title" label="Title" defaultValue={defaults.title} placeholder="e.g. Blue denim jacket" required />
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="description" className="text-sm font-medium text-foreground">
-              Description
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="description" className="text-sm font-medium text-foreground">
+                Description
+              </label>
+              <Button type="button" variant="ghost" size="sm" onClick={handleGenerate} disabled={isGenerating} className="gap-1.5 text-xs">
+                {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />}
+                Generate with AI
+              </Button>
+            </div>
             <textarea
               id="description"
               name="description"
-              defaultValue={defaults.description}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
               rows={3}
               className="rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
             />
+            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

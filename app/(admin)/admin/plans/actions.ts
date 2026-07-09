@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
-import { createPlan, updatePlan, setPlanActive } from "@/services/monetization/subscription-plan.service";
+import { createPlan, updatePlan, setPlanActive, setPlanFeature } from "@/services/monetization/subscription-plan.service";
 import { ROUTES } from "@/lib/constants/routes";
 import type { SubscriptionPlanInput } from "@/services/monetization/subscription-plan.service";
 
@@ -41,5 +41,16 @@ export async function setPlanActiveAction(formData: FormData) {
   const planId = String(formData.get("planId"));
   const isActive = formData.get("isActive") === "true";
   await setPlanActive(session.userId, planId, isActive);
+  revalidatePath(ROUTES.admin.plans);
+}
+
+export async function setPlanFeatureAction(formData: FormData) {
+  const session = await requireRole(Role.SUPER_ADMIN);
+  const planId = String(formData.get("planId"));
+  const featureKey = String(formData.get("featureKey"));
+  const enabled = formData.get("enabled") === "on";
+  const monthlyLimitRaw = String(formData.get("monthlyLimit") || "").trim();
+  const monthlyLimit = monthlyLimitRaw === "" ? null : Number(monthlyLimitRaw);
+  await setPlanFeature(session.userId, planId, featureKey, enabled, monthlyLimit);
   revalidatePath(ROUTES.admin.plans);
 }

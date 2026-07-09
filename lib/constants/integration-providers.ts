@@ -94,7 +94,6 @@ export const PROVIDER_CATALOG: Record<IntegrationCategory, ProviderSpec[]> = {
     {
       value: "openai",
       label: "OpenAI",
-      notYetWired: true,
       fields: [{ key: "API_KEY", label: "API Key", placeholder: "sk-..." }],
     },
     {

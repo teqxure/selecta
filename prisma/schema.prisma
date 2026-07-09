@@ -317,6 +317,7 @@ model SellerProfile {
   monetizationPayments     MonetizationPayment[]
   growthPartnerApplication GrowthPartnerApplication[]
   offers                   Offer[]
+  aiFeatureUsages          AiFeatureUsage[]
 
   @@index([verificationStatus])
   @@index([agentId])
@@ -1351,9 +1352,54 @@ model SubscriptionPlan {
 
   createdBy     User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
   subscriptions SellerSubscription[]
+  features      PlanFeature[]
 
   @@index([isActive])
   @@map("subscription_plans")
+}
+
+/// Feature flags scoped to a specific plan, editable from the admin plans UI
+/// with no code deploy — `featureKey` is a free string matching a
+/// `FeatureKey` value in code (see services/monetization/entitlement.service.ts).
+/// This is deliberately separate from the fixed boolean columns above
+/// (maxProducts, hasAnalyticsAccess, etc.): those are the small, stable set
+/// of "core" limits with dedicated enforcement already wired elsewhere;
+/// this table is for anything added later (AI features first) without a
+/// schema migration each time.
+model PlanFeature {
+  id           String   @id @default(cuid())
+  planId       String   @map("plan_id")
+  featureKey   String   @map("feature_key")
+  enabled      Boolean  @default(false)
+  /// Null = no cap (still gated by `enabled`, just unlimited uses per cycle).
+  monthlyLimit Int?     @map("monthly_limit")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, featureKey])
+  @@map("plan_features")
+}
+
+/// Real per-seller, per-feature usage counting for anything with a
+/// monthly cap (AI features today). Cycle = calendar month, not the
+/// seller's individual subscription renewal date — simpler, and matches
+/// "N actions/month" exactly. One row per (seller, feature, month);
+/// `count` increments only on a successful use, never on a failed call.
+model AiFeatureUsage {
+  id         String   @id @default(cuid())
+  sellerId   String   @map("seller_id")
+  featureKey String   @map("feature_key")
+  cycleStart DateTime @map("cycle_start")
+  count      Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([sellerId, featureKey, cycleStart])
+  @@map("ai_feature_usages")
 }
 
 /// One row per subscription period a seller has ever had — history is kept

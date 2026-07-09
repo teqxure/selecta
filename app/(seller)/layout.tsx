@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
-import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3, Rocket, Megaphone, ShieldCheck } from "lucide-react";
+import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3, Rocket, Megaphone, ShieldCheck, LogOut } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
+import { Logo } from "@/components/ui/Logo";
+import { Footer } from "@/components/layout/Footer";
+import { logoutAction } from "@/app/(auth)/actions";
 import { ROUTES } from "@/lib/constants/routes";
 import { currentUser } from "@/lib/auth/current-user";
 import { findSellerProfileByUserId } from "@/services/sellers/seller.service";
@@ -43,9 +46,27 @@ export default async function SellerLayout({ children }: { children: ReactNode }
   const profile = user?.role === Role.SELLER ? await findSellerProfileByUserId(user.id) : null;
 
   // Still mid-onboarding: show a plain, focused shell — the dashboard nav
-  // (products/orders/wallet) is meaningless before a store exists.
+  // (products/orders/wallet) is meaningless before a store exists. Still
+  // needs a way out, though — a bare shell with literally nothing clickable
+  // traps anyone who wants to leave partway through the wizard.
   if (user?.role === Role.SELLER && !profile?.onboardingCompletedAt) {
-    return <div className="mx-auto flex min-h-full max-w-2xl flex-1 items-center justify-center px-6">{children}</div>;
+    return (
+      <div className="flex min-h-full flex-1 flex-col">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <Logo href={env.NEXT_PUBLIC_APP_URL} />
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" strokeWidth={2} />
+              Log out
+            </button>
+          </form>
+        </div>
+        <div className="mx-auto flex w-full max-w-2xl flex-1 items-center justify-center px-6">{children}</div>
+      </div>
+    );
   }
 
   return (
@@ -58,7 +79,10 @@ export default async function SellerLayout({ children }: { children: ReactNode }
           marketplaceUrl={env.NEXT_PUBLIC_APP_URL}
         />
       )}
-      <main className="flex-1 p-5 md:p-8">{children}</main>
+      <div className="flex flex-1 flex-col">
+        <main className="flex-1 p-5 md:p-8">{children}</main>
+        <Footer />
+      </div>
     </div>
   );
 }

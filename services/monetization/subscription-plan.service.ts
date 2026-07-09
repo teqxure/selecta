@@ -4,7 +4,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { sanitizeText } from "@/lib/security/sanitize";
 
 export function listAllPlans() {
-  return db.subscriptionPlan.findMany({ orderBy: [{ sortOrder: "asc" }, { monthlyPrice: "asc" }] });
+  return db.subscriptionPlan.findMany({ include: { features: true }, orderBy: [{ sortOrder: "asc" }, { monthlyPrice: "asc" }] });
 }
 
 export function listActivePlans() {
@@ -117,6 +117,27 @@ export async function updatePlan(adminId: string, planId: string, input: Subscri
 
     return plan;
   });
+}
+
+/**
+ * The "no deploy needed" mechanism — toggling a `PlanFeature` row takes
+ * effect on the plan's sellers' very next request, since
+ * `entitlement.service.ts#canAccess` reads it live, not from any cache.
+ */
+export async function setPlanFeature(adminId: string, planId: string, featureKey: string, enabled: boolean, monthlyLimit: number | null) {
+  if (monthlyLimit !== null && monthlyLimit < 0) throw new ValidationError("Monthly limit cannot be negative");
+
+  const feature = await db.planFeature.upsert({
+    where: { planId_featureKey: { planId, featureKey } },
+    create: { planId, featureKey, enabled, monthlyLimit },
+    update: { enabled, monthlyLimit },
+  });
+
+  await db.auditLog.create({
+    data: { actorId: adminId, action: "PLAN_FEATURE_UPDATED", entityType: "SubscriptionPlan", entityId: planId, metadata: { featureKey, enabled, monthlyLimit } },
+  });
+
+  return feature;
 }
 
 export async function setPlanActive(adminId: string, planId: string, isActive: boolean) {

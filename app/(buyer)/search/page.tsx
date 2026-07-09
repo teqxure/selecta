@@ -1,11 +1,12 @@
-import { Search as SearchIcon } from "lucide-react";
 import { currentUser } from "@/lib/auth/current-user";
-import { searchProducts } from "@/services/products/product.service";
+import { searchProducts, getRecentSearches, getPopularSearchTerms } from "@/services/products/search.service";
 import { getSavedProductIds } from "@/services/products/saved-product.service";
 import { listActiveCategoryTree } from "@/services/categories/category.service";
+import { getRequestMeta } from "@/lib/security/request-meta";
 import { searchFiltersSchema, GENDER_LABELS, CONDITION_GRADE_LABELS } from "@/lib/validators/product";
 import { ProductGrid } from "@/components/marketplace/ProductGrid";
-import { Button } from "@/components/ui/Button";
+import { SearchBar } from "./search-bar";
+import { SortSelect } from "./sort-select";
 import { ROUTES } from "@/lib/constants/routes";
 
 const pillClassName =
@@ -18,12 +19,15 @@ export default async function SearchPage({
 }) {
   const rawParams = await searchParams;
   const parsed = searchFiltersSchema.safeParse(rawParams);
-  const filters = parsed.success ? parsed.data : { page: 1 };
+  const filters = parsed.success ? parsed.data : { page: 1, sort: "relevance" as const };
 
-  const [{ items: products, totalCount }, categories, user] = await Promise.all([
-    searchProducts(filters),
+  const [user, { ipAddress }] = await Promise.all([currentUser(), getRequestMeta()]);
+
+  const [{ items: products, totalCount }, categories, recentSearches, popularSearches] = await Promise.all([
+    searchProducts(filters, undefined, { userId: user?.id, ipAddress }),
     listActiveCategoryTree(),
-    currentUser(),
+    user ? getRecentSearches(user.id) : Promise.resolve([]),
+    getPopularSearchTerms(6),
   ]);
   const savedIds = user ? await getSavedProductIds(user.id, products.map((p) => p.id)) : undefined;
 
@@ -32,27 +36,10 @@ export default async function SearchPage({
       <h1 className="font-display text-2xl font-semibold text-foreground">Explore</h1>
 
       <form action={ROUTES.search} method="GET" className="flex flex-col gap-3">
-        <div className="flex h-13 items-center gap-2 rounded-full border border-border bg-secondary pl-5 pr-1.5 shadow-[var(--shadow-card)] transition-colors focus-within:border-accent/50">
-          <SearchIcon className="h-4.5 w-4.5 shrink-0 text-muted-foreground" strokeWidth={2} />
-          <input
-            name="q"
-            defaultValue={rawParams.q ?? ""}
-            placeholder="Search by title or brand"
-            aria-label="Search"
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-          />
-          <Button type="submit" variant="accent" size="sm" className="rounded-full">
-            Search
-          </Button>
-        </div>
+        <SearchBar initialQuery={rawParams.q ?? ""} recentSearches={recentSearches} popularSearches={popularSearches.map((p) => p.query)} />
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            name="categoryId"
-            defaultValue={rawParams.categoryId ?? ""}
-            aria-label="Category"
-            className={pillClassName}
-          >
+          <select name="categoryId" defaultValue={rawParams.categoryId ?? ""} aria-label="Category" className={pillClassName}>
             <option value="">Category</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -106,6 +93,14 @@ export default async function SearchPage({
           </div>
 
           <input
+            name="brand"
+            defaultValue={rawParams.brand ?? ""}
+            placeholder="Brand"
+            aria-label="Brand"
+            className="h-10 w-28 rounded-full border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+          />
+
+          <input
             name="size"
             defaultValue={rawParams.size ?? ""}
             placeholder="Size"
@@ -120,13 +115,30 @@ export default async function SearchPage({
             aria-label="Location"
             className="h-10 w-32 rounded-full border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           />
+
+          <label
+            className={`flex h-10 cursor-pointer items-center gap-1.5 rounded-full border px-4 text-sm transition-colors ${
+              rawParams.verifiedOnly === "true" ? "border-accent bg-accent/10 text-accent" : "border-border bg-background text-foreground"
+            }`}
+          >
+            <input type="checkbox" name="verifiedOnly" value="true" defaultChecked={rawParams.verifiedOnly === "true"} className="sr-only" />
+            Verified sellers only
+          </label>
         </div>
       </form>
 
-      <div className="flex flex-col gap-6">
-        <p className="text-sm text-muted-foreground">
-          {totalCount} result{totalCount === 1 ? "" : "s"}
-        </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            {totalCount} result{totalCount === 1 ? "" : "s"}
+          </p>
+          <form action={ROUTES.search} method="GET">
+            {Object.entries(rawParams)
+              .filter(([key]) => key !== "sort" && key !== "page")
+              .map(([key, value]) => (value ? <input key={key} type="hidden" name={key} value={value} /> : null))}
+            <SortSelect value={filters.sort} className={pillClassName} />
+          </form>
+        </div>
         <ProductGrid products={products} savedIds={savedIds} />
       </div>
     </div>

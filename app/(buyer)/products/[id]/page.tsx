@@ -1,7 +1,14 @@
 import { notFound } from "next/navigation";
 import { currentUser } from "@/lib/auth/current-user";
-import { getProductForPreview, getSimilarProducts, recordView } from "@/services/products/product.service";
+import {
+  getProductForPreview,
+  getSimilarProducts,
+  getSameSellerProducts,
+  getRecentlyViewedProducts,
+  recordProductView,
+} from "@/services/products/search.service";
 import { isProductSaved } from "@/services/products/saved-product.service";
+import { getRequestMeta } from "@/lib/security/request-meta";
 import { isAppError } from "@/lib/errors";
 import { CONDITION_GRADE_LABELS } from "@/lib/validators/product";
 import { Badge, CONDITION_GRADE_TONE } from "@/components/ui/Badge";
@@ -26,13 +33,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     throw error;
   }
 
-  const [similar, saved] = await Promise.all([
+  const [similar, sameSeller, recentlyViewed, saved] = await Promise.all([
     getSimilarProducts(product),
+    getSameSellerProducts(product.sellerId, product.id),
+    user ? getRecentlyViewedProducts(user.id, product.id) : Promise.resolve([]),
     user ? isProductSaved(user.id, product.id) : Promise.resolve(false),
   ]);
 
   if (product.status === "ACTIVE") {
-    await recordView(product.id, user?.id);
+    const { ipAddress } = await getRequestMeta();
+    await recordProductView(product.id, { userId: user?.id, ipAddress });
   }
 
   const format = (value: number) =>
@@ -97,6 +107,18 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       {similar.length > 0 && (
         <ProductSection title="Similar items">
           <ProductGrid products={similar} />
+        </ProductSection>
+      )}
+
+      {sameSeller.length > 0 && (
+        <ProductSection title={`More from ${sellerName}`}>
+          <ProductGrid products={sameSeller} />
+        </ProductSection>
+      )}
+
+      {recentlyViewed.length > 0 && (
+        <ProductSection title="Recently viewed">
+          <ProductGrid products={recentlyViewed} />
         </ProductSection>
       )}
     </div>

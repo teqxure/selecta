@@ -84,6 +84,12 @@ enum ProductEventType {
   UNSAVE
   SHARE
   CONTACT_SELLER
+  /// One row per product shown on a search results page — batched via
+  /// `createMany` per search, not one query per product. Backs seller
+  /// "search appearances" insight and admin search analytics. Deliberately
+  /// NOT logged for homepage sections (would multiply write volume for
+  /// every visit with no proportional analytical value).
+  IMPRESSION
 }
 
 enum OrderStatus {
@@ -231,6 +237,7 @@ model User {
   storeFollows    StoreFollow[]
   conversations   Conversation[]  @relation("BuyerConversations")
   messages        Message[]
+  searchQueries   SearchQuery[]
 
   transactionsAsBuyer    Transaction[]          @relation("BuyerTransactions")
   orderStatusChanges     OrderStatusHistory[]
@@ -480,6 +487,10 @@ model Product {
   @@index([status])
   @@index([city, state])
   @@index([isFeatured])
+  @@index([brand])
+  @@index([price])
+  @@index([viewCount])
+  @@index([likeCount])
   @@map("products")
 }
 
@@ -535,6 +546,27 @@ model ProductEvent {
   @@index([productId, type, createdAt])
   @@index([userId])
   @@map("product_events")
+}
+
+/// One row per executed search — the source of truth for autocomplete
+/// suggestions, "popular searches", "trending keywords", and admin search
+/// analytics (top searches, zero-result searches). Logged from
+/// `searchProducts` only when a keyword was actually typed (`q` present),
+/// not on pure filter/category browsing.
+model SearchQuery {
+  id          String   @id @default(cuid())
+  query       String
+  userId      String?  @map("user_id")
+  resultCount Int      @map("result_count")
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([query])
+  @@index([createdAt])
+  @@index([resultCount])
+  @@map("search_queries")
 }
 
 model CartItem {

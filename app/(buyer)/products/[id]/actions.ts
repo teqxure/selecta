@@ -3,7 +3,7 @@
 import { requireAuth } from "@/lib/auth/rbac";
 import { db } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
-import { recordContactSeller } from "@/services/products/product.service";
+import { recordContactSeller } from "@/services/products/search.service";
 
 export async function revealSellerContactAction(productId: string) {
   const session = await requireAuth();

@@ -17,6 +17,7 @@ import {
   ClipboardList,
   UserCog,
   Bell,
+  Search,
 } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
@@ -58,6 +59,7 @@ const ADMIN_NAV_GROUPS = [
     label: "Commerce",
     items: [
       { label: "Finance", href: ROUTES.admin.finance, icon: LineChart, permission: "reports.view" },
+      { label: "Search analytics", href: ROUTES.admin.searchAnalytics, icon: Search, permission: "reports.view" },
       { label: "Withdrawals", href: ROUTES.admin.withdrawals, icon: Banknote, permission: "payouts.manage" },
       { label: "Commissions", href: ROUTES.admin.commissions, icon: Percent, permission: "SUPER_ADMIN_ONLY" },
     ],

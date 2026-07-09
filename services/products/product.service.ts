@@ -4,14 +4,13 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { sanitizeOptionalText, sanitizeText } from "@/lib/security/sanitize";
 import { createNotification } from "@/services/notifications/notification.service";
 import { PAGINATION } from "@/lib/constants/app";
-import type {
-  ProductDetailsInput,
-  ProductImagesInput,
-  ProductLocationInput,
-  ProductPricingInput,
-  SearchFilters,
-} from "@/lib/validators/product";
-import type { PaginatedResult } from "@/types";
+import type { ProductDetailsInput, ProductImagesInput, ProductLocationInput, ProductPricingInput } from "@/lib/validators/product";
+
+/** Shared shape for card grids: cover image + enough seller info to render a name. */
+const cardInclude = {
+  images: { orderBy: { position: "asc" as const }, take: 1 },
+  seller: { select: { storeName: true, businessName: true, ratingAverage: true } },
+} as const;
 
 const MIN_IMAGES = 2;
 
@@ -259,183 +258,6 @@ export async function duplicateProduct(sellerProfileId: string, productId: strin
       },
     },
   });
-}
-
-// ---------------------------------------------------------------------------
-// Buyer: discovery
-// ---------------------------------------------------------------------------
-
-/** Shared shape for card grids: cover image + enough seller info to render a name. */
-const cardInclude = {
-  images: { orderBy: { position: "asc" as const }, take: 1 },
-  seller: { select: { storeName: true, businessName: true, ratingAverage: true } },
-} as const;
-
-type ProductRecord = Awaited<ReturnType<typeof db.product.findMany<{ include: typeof cardInclude }>>>[number];
-
-const publicProductInclude = {
-  images: { orderBy: { position: "asc" as const } },
-  category: true,
-  subcategory: true,
-  seller: { include: { user: true } },
-} as const;
-
-export async function listActiveProducts(
-  page = 1,
-  pageSize: number = PAGINATION.defaultPageSize,
-): Promise<PaginatedResult<ProductRecord>> {
-  const [items, totalCount] = await Promise.all([
-    db.product.findMany({
-      where: { status: "ACTIVE" },
-      include: cardInclude,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    db.product.count({ where: { status: "ACTIVE" } }),
-  ]);
-
-  return { items, page, pageSize, totalCount, totalPages: Math.ceil(totalCount / pageSize) };
-}
-
-export function listPremiumFinds(limit = 12) {
-  return db.product.findMany({
-    where: { status: "ACTIVE", conditionGrade: "SELECTA_GOLD" },
-    include: cardInclude,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-}
-
-export function listUnderBudget(maxPrice: number, limit = 12) {
-  return db.product.findMany({
-    where: { status: "ACTIVE", price: { lte: maxPrice } },
-    include: cardInclude,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-}
-
-export function listTrending(limit = 12) {
-  return db.product.findMany({
-    where: { status: "ACTIVE" },
-    include: cardInclude,
-    orderBy: [{ viewCount: "desc" }, { likeCount: "desc" }],
-    take: limit,
-  });
-}
-
-export function listNearby(city: string, limit = 12) {
-  return db.product.findMany({
-    where: { status: "ACTIVE", city: { equals: city, mode: "insensitive" } },
-    include: cardInclude,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-}
-
-export async function searchProducts(
-  filters: SearchFilters,
-  pageSize: number = PAGINATION.defaultPageSize,
-): Promise<PaginatedResult<ProductRecord>> {
-  const where = {
-    status: "ACTIVE" as const,
-    ...(filters.q && {
-      OR: [
-        { title: { contains: filters.q, mode: "insensitive" as const } },
-        { brand: { contains: filters.q, mode: "insensitive" as const } },
-      ],
-    }),
-    ...(filters.categoryId && { categoryId: filters.categoryId }),
-    ...(filters.subcategoryId && { subcategoryId: filters.subcategoryId }),
-    ...(filters.gender && { gender: filters.gender }),
-    ...(filters.conditionGrade && { conditionGrade: filters.conditionGrade }),
-    ...(filters.size && { size: { equals: filters.size, mode: "insensitive" as const } }),
-    ...(filters.city && { city: { equals: filters.city, mode: "insensitive" as const } }),
-    ...(filters.state && { state: { equals: filters.state, mode: "insensitive" as const } }),
-    ...((filters.minPrice !== undefined || filters.maxPrice !== undefined) && {
-      price: {
-        ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
-        ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
-      },
-    }),
-    ...(filters.minSellerRating !== undefined && {
-      seller: { ratingAverage: { gte: filters.minSellerRating } },
-    }),
-  };
-
-  const [items, totalCount] = await Promise.all([
-    db.product.findMany({
-      where,
-      include: cardInclude,
-      orderBy: { createdAt: "desc" },
-      skip: (filters.page - 1) * pageSize,
-      take: pageSize,
-    }),
-    db.product.count({ where }),
-  ]);
-
-  return { items, page: filters.page, pageSize, totalCount, totalPages: Math.ceil(totalCount / pageSize) };
-}
-
-export async function getPublicProductById(id: string) {
-  const product = await db.product.findFirst({ where: { id, status: "ACTIVE" }, include: publicProductInclude });
-  if (!product) throw new NotFoundError("Product");
-  return product;
-}
-
-/** Seller/admin preview of a non-active product (e.g. still in review). */
-export async function getProductForPreview(id: string, viewerUserId: string, viewerRole: string) {
-  const product = await db.product.findUnique({ where: { id }, include: publicProductInclude });
-  if (!product) throw new NotFoundError("Product");
-
-  const isOwner = product.seller.userId === viewerUserId;
-  const isStaff = viewerRole === "ADMIN" || viewerRole === "SUPER_ADMIN";
-  if (product.status !== "ACTIVE" && !isOwner && !isStaff) throw new NotFoundError("Product");
-
-  return product;
-}
-
-export function getSimilarProducts(product: { id: string; categoryId: string }, limit = 8) {
-  return db.product.findMany({
-    where: { status: "ACTIVE", categoryId: product.categoryId, id: { not: product.id } },
-    include: cardInclude,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-}
-
-const VIEW_MILESTONES = [100, 500, 1000, 5000, 10000];
-
-export async function recordView(productId: string, userId?: string) {
-  const [product] = await db.$transaction([
-    db.product.update({
-      where: { id: productId },
-      data: { viewCount: { increment: 1 } },
-      include: { seller: true },
-    }),
-    db.productEvent.create({ data: { productId, userId, type: "VIEW" } }),
-  ]);
-
-  if (VIEW_MILESTONES.includes(product.viewCount)) {
-    await createNotification(
-      product.seller.userId,
-      "SYSTEM",
-      "Your product is getting noticed!",
-      `"${product.title}" just hit ${product.viewCount} views.`,
-    );
-  }
-}
-
-export async function recordShare(productId: string, userId?: string) {
-  await db.$transaction([
-    db.product.update({ where: { id: productId }, data: { shareCount: { increment: 1 } } }),
-    db.productEvent.create({ data: { productId, userId, type: "SHARE" } }),
-  ]);
-}
-
-export async function recordContactSeller(productId: string, userId: string) {
-  await db.productEvent.create({ data: { productId, userId, type: "CONTACT_SELLER" } });
 }
 
 // ---------------------------------------------------------------------------

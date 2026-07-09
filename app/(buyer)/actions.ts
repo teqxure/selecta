@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth/rbac";
 import { saveProduct, unsaveProduct } from "@/services/products/saved-product.service";
 import { addToCart, removeFromCart } from "@/services/products/cart.service";
-import { recordShare, recordContactSeller } from "@/services/products/product.service";
+import { recordShare, recordContactSeller } from "@/services/products/search.service";
 import { followStore, unfollowStore } from "@/services/sellers/store-follow.service";
 import { ROUTES } from "@/lib/constants/routes";
 

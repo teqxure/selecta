@@ -149,3 +149,51 @@ export async function getTrendingInsight(sellerId: string) {
 
   return { categoryName: top.category.name, city: top.city };
 }
+
+/**
+ * Discovery performance for a seller's own listings: how often their
+ * products surface in search results (IMPRESSION events, logged only from
+ * `searchProducts`), views, and saves — plus the search terms buyers typed
+ * that led to their products, matched at read time against this seller's
+ * own titles/brands rather than logged per-impression (keeps write volume
+ * on the search path independent of catalog size).
+ */
+export async function getSearchInsights(sellerId: string, days = 30) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const products = await db.product.findMany({
+    where: { sellerId, status: { not: "REMOVED" } },
+    select: { id: true, title: true, brand: true },
+  });
+  const productIds = products.map((p) => p.id);
+  if (productIds.length === 0) {
+    return { impressions: 0, views: 0, saves: 0, popularKeywords: [] as { query: string; count: number }[] };
+  }
+
+  const [impressions, views, saves] = await Promise.all([
+    db.productEvent.count({ where: { productId: { in: productIds }, type: "IMPRESSION", createdAt: { gte: since } } }),
+    db.productEvent.count({ where: { productId: { in: productIds }, type: "VIEW", createdAt: { gte: since } } }),
+    db.productEvent.count({ where: { productId: { in: productIds }, type: "SAVE", createdAt: { gte: since } } }),
+  ]);
+
+  const searchTerms = new Set<string>();
+  for (const product of products) {
+    searchTerms.add(product.title.toLowerCase());
+    if (product.brand) searchTerms.add(product.brand.toLowerCase());
+  }
+
+  const queries = await db.searchQuery.groupBy({
+    by: ["query"],
+    where: { createdAt: { gte: since } },
+    _count: true,
+    orderBy: { _count: { query: "desc" } },
+    take: 200,
+  });
+  const popularKeywords = queries
+    .filter((q) => Array.from(searchTerms).some((term) => term.includes(q.query) || q.query.includes(term)))
+    .slice(0, 8)
+    .map((q) => ({ query: q.query, count: q._count }));
+
+  return { impressions, views, saves, popularKeywords };
+}

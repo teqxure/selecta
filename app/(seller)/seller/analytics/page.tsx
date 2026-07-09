@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Eye, Heart, Share2, TrendingUp } from "lucide-react";
+import { Eye, Heart, Share2, TrendingUp, Search, MousePointerClick } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
@@ -9,21 +9,24 @@ import {
   getBestSellingCategory,
   getRevenueHistory,
   getCategoryPerformanceInsight,
+  getSearchInsights,
 } from "@/services/analytics/analytics.service";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 
 export default async function SellerAnalyticsPage() {
   const session = await requireRole(Role.SELLER);
   const profile = await getSellerProfileByUserId(session.userId);
 
-  const [analytics, mostViewed, bestCategory, revenueHistory, insight] = await Promise.all([
+  const [analytics, mostViewed, bestCategory, revenueHistory, insight, searchInsights] = await Promise.all([
     getSellerAnalytics(profile.id),
     getMostViewedProducts(profile.id, 5),
     getBestSellingCategory(profile.id),
     getRevenueHistory(profile.id, 14),
     getCategoryPerformanceInsight(profile.id),
+    getSearchInsights(profile.id),
   ]);
 
   const revenueBars = revenueHistory.slice(-7).map((entry) => ({
@@ -102,6 +105,33 @@ export default async function SellerAnalyticsPage() {
               </div>
             ))
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Search performance (last 30 days)</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <StatCard label="Search appearances" icon={Search} value={searchInsights.impressions.toLocaleString()} />
+            <StatCard label="Views" icon={MousePointerClick} value={searchInsights.views.toLocaleString()} />
+            <StatCard label="Saves" icon={Heart} value={searchInsights.saves.toLocaleString()} />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium text-secondary-foreground">Keywords buyers used to find you</p>
+            {searchInsights.popularKeywords.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No matching searches yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {searchInsights.popularKeywords.map((keyword) => (
+                  <Badge key={keyword.query} tone="neutral">
+                    {keyword.query} · {keyword.count}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -84,18 +84,43 @@ export type ProductDetailsInput = z.infer<typeof productDetailsSchema>;
 export type ProductPricingInput = z.infer<typeof productPricingSchema>;
 export type ProductLocationInput = z.infer<typeof productLocationSchema>;
 
+export const SEARCH_SORT_OPTIONS = [
+  "relevance",
+  "newest",
+  "price_asc",
+  "price_desc",
+  "most_viewed",
+  "most_saved",
+  "trending",
+] as const;
+export type SearchSort = (typeof SEARCH_SORT_OPTIONS)[number];
+
+export const SEARCH_SORT_LABELS: Record<SearchSort, string> = {
+  relevance: "Best match",
+  newest: "Newest first",
+  price_asc: "Price: low to high",
+  price_desc: "Price: high to low",
+  most_viewed: "Most viewed",
+  most_saved: "Most saved",
+  trending: "Trending",
+};
+
 export const searchFiltersSchema = z.object({
   q: z.string().max(120).optional(),
   categoryId: z.string().optional(),
   subcategoryId: z.string().optional(),
+  brand: z.string().max(60).optional(),
+  sellerId: z.string().optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
   size: z.string().optional(),
   gender: z.enum(ProductGender).optional(),
   conditionGrade: z.enum(ConditionGrade).optional(),
   minSellerRating: z.coerce.number().min(0).max(5).optional(),
+  verifiedOnly: z.coerce.boolean().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
+  sort: z.enum(SEARCH_SORT_OPTIONS).default("relevance"),
   page: z.coerce.number().int().min(1).default(1),
 });
 

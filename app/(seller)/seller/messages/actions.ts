@@ -20,7 +20,7 @@ export async function sendSellerMessageAction(
   formData: FormData,
 ): Promise<SendMessageState> {
   const user = await requireActiveRole(Role.SELLER);
-  if (!checkMessageRateLimit(user.id).allowed) throw new RateLimitError();
+  if (!(await checkMessageRateLimit(user.id)).allowed) throw new RateLimitError();
 
   try {
     const imageUrl = String(formData.get("imageUrl") ?? "") || undefined;

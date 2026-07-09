@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { createAdminAction, type CreateAdminActionState } from "./actions";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { PermissionCheckboxes } from "@/components/admin/PermissionCheckboxes";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
@@ -20,7 +21,7 @@ export function CreateAdminForm() {
         <Input name="lastName" label="Last name" required />
       </div>
       <Input name="email" type="email" label="Email" required />
-      <Input name="password" type="password" label="Temporary password" helperText="At least 8 characters." required />
+      <PasswordInput name="password" label="Temporary password" helperText="At least 8 characters." required />
 
       <div>
         <p className="mb-2 text-sm font-medium text-foreground">Permissions</p>

@@ -7,6 +7,7 @@ import { transitionOrderStatus } from "@/services/orders/order-state-machine";
 import { getOrCreateConversation } from "@/services/messaging/conversation.service";
 import { ROUTES } from "@/lib/constants/routes";
 import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
+import { sanitizeText } from "@/lib/security/sanitize";
 import type { DisputeType } from "@/generated/prisma/enums";
 import type { OrderStatus } from "@/generated/prisma/enums";
 
@@ -45,6 +46,10 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
   });
   if (existing) throw new ValidationError("You already have an open dispute for this seller on this order");
 
+  const description = sanitizeText(input.description);
+  if (!description) throw new ValidationError("Describe the issue before filing a dispute");
+  if (description.length > 3000) throw new ValidationError("Description is too long (3000 characters max)");
+
   if (order.status !== "DISPUTED") {
     await transitionOrderStatus(input.orderId, { type: "BUYER", userId: buyerId }, "DISPUTED", {
       note: `Dispute opened: ${input.type}`,
@@ -58,7 +63,7 @@ export async function fileDispute(buyerId: string, input: FileDisputeInput) {
       buyerId,
       sellerId: input.sellerId,
       type: input.type,
-      description: input.description,
+      description,
       evidenceUrls: input.evidenceUrls ?? [],
     },
   });

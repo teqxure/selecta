@@ -5,6 +5,7 @@ import Link from "next/link";
 import { loginAction, type AuthActionState } from "@/app/(auth)/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
 import { GoogleAuthButton, AuthDivider } from "@/components/auth/GoogleAuthButton";
@@ -34,7 +35,7 @@ export function LoginForm({ googleEnabled, oauthError }: LoginFormProps) {
         )}
         <form action={formAction} className="flex flex-col gap-4">
           <Input name="email" type="email" label="Email" required />
-          <Input name="password" type="password" label="Password" required />
+          <PasswordInput name="password" label="Password" required />
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" name="rememberMe" className="h-4 w-4 rounded border-border accent-accent" />
             Remember me for 30 days

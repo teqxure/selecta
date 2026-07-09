@@ -19,7 +19,7 @@ import { ROUTES } from "@/lib/constants/routes";
  */
 export async function startProductConversationAction(productId: string) {
   const session = await requireAuth();
-  if (!checkConversationRateLimit(session.userId).allowed) throw new RateLimitError();
+  if (!(await checkConversationRateLimit(session.userId)).allowed) throw new RateLimitError();
 
   const product = await db.product.findUnique({ where: { id: productId }, select: { sellerId: true } });
   if (!product) throw new NotFoundError("Product");
@@ -35,7 +35,7 @@ export interface MakeOfferState {
 
 export async function makeOfferAction(productId: string, _prevState: MakeOfferState, formData: FormData): Promise<MakeOfferState> {
   const session = await requireAuth();
-  if (!checkConversationRateLimit(session.userId).allowed) throw new RateLimitError();
+  if (!(await checkConversationRateLimit(session.userId)).allowed) throw new RateLimitError();
 
   const product = await db.product.findUnique({ where: { id: productId }, select: { sellerId: true } });
   if (!product) throw new NotFoundError("Product");

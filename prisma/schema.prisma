@@ -1446,3 +1446,23 @@ model GrowthPartnerApplication {
   @@index([status])
   @@map("growth_partner_applications")
 }
+
+// ---------------------------------------------------------------------------
+// Security
+// ---------------------------------------------------------------------------
+
+/// Persisted fixed-window rate-limit counters (login attempts, messages
+/// sent, checkout attempts, etc.) — replaces an in-process Map that gave no
+/// real protection on serverless, where each invocation can land on a
+/// different instance with its own empty memory. `key` is a caller-chosen
+/// string like "login:user@example.com:203.0.113.1"; the row is reused
+/// (not reset to a new row) once its window has passed, so this table
+/// self-bounds in size rather than growing forever.
+model RateLimitEntry {
+  key     String   @id
+  count   Int      @default(1)
+  resetAt DateTime @map("reset_at")
+
+  @@index([resetAt])
+  @@map("rate_limit_entries")
+}

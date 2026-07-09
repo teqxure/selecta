@@ -24,7 +24,7 @@ export const registerSchema = z
 
 export const loginSchema = z.object({
   email: emailSchema,
-  password: z.string().min(1, "Password is required"),
+  password: z.string().min(1, "Password is required").max(72, "Password must be at most 72 characters"),
   rememberMe: checkboxSchema.optional().default(false),
 });
 

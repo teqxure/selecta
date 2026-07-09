@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Plug } from "lucide-react";
 import {
@@ -86,10 +87,9 @@ export default async function AdminIntegrationsPage() {
                       {spec.fields.map((field) => {
                         const existing = secretsByKey.get(field.key);
                         return (
-                          <Input
+                          <PasswordInput
                             key={field.key}
                             name={field.key}
-                            type="password"
                             label={field.label}
                             placeholder={existing ? `********************${existing.lastFourDisplay}` : field.placeholder}
                             helperText={field.helperText}
@@ -119,7 +119,7 @@ export default async function AdminIntegrationsPage() {
                       <form action={setIntegrationSecretAction} className="flex items-end gap-2 pt-1">
                         <input type="hidden" name="integrationSettingId" value={integration.id} />
                         <Input name="key" placeholder="SECRET_KEY" className="h-9 flex-1" />
-                        <Input name="value" type="password" placeholder="Value" className="h-9 flex-1" />
+                        <PasswordInput name="value" placeholder="Value" className="h-9 flex-1" />
                         <Button type="submit" size="sm" variant="secondary">
                           Save secret
                         </Button>

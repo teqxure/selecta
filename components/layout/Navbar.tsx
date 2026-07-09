@@ -4,12 +4,14 @@ import { ROUTES } from "@/lib/constants/routes";
 import { currentUser } from "@/lib/auth/current-user";
 import { logoutAction } from "@/app/(auth)/actions";
 import { getUnreadNotificationCount } from "@/services/notifications/notification.service";
+import { getCartItemCount } from "@/services/products/cart.service";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
 
 export async function Navbar() {
   const user = await currentUser();
   const unreadCount = user ? await getUnreadNotificationCount(user.id) : 0;
+  const cartCount = user ? await getCartItemCount(user.id) : 0;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
@@ -57,9 +59,14 @@ export async function Navbar() {
               <Link
                 href={ROUTES.cart}
                 aria-label="Cart"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+                className="relative flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
               >
                 <ShoppingBag className="h-4.5 w-4.5" strokeWidth={2} />
+                {cartCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground">
+                    {cartCount > 99 ? "99+" : cartCount}
+                  </span>
+                )}
               </Link>
               <Link
                 href={ROUTES.profile}

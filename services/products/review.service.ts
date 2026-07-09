@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { createNotification } from "@/services/notifications/notification.service";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { sanitizeOptionalText } from "@/lib/security/sanitize";
 
 export interface CreateReviewInput {
   orderItemId: string;
@@ -27,6 +28,9 @@ export async function createReview(buyerId: string, input: CreateReviewInput) {
     throw new ValidationError("Rating must be between 1 and 5");
   }
 
+  const comment = sanitizeOptionalText(input.comment);
+  if (comment && comment.length > 2000) throw new ValidationError("Review comment is too long (2000 characters max)");
+
   const orderItem = await db.orderItem.findUnique({
     where: { id: input.orderItemId },
     include: { order: true, product: { include: { seller: true } }, review: true },
@@ -50,7 +54,7 @@ export async function createReview(buyerId: string, input: CreateReviewInput) {
         authorId: buyerId,
         orderItemId: orderItem.id,
         rating: input.rating,
-        comment: input.comment,
+        comment,
       },
     });
   } catch (error) {

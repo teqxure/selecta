@@ -26,7 +26,7 @@ export async function registerAction(_prevState: AuthActionState, formData: Form
   }
 
   const { ipAddress, userAgent } = await getRequestMeta();
-  const rateLimit = checkLoginRateLimit(`register:${ipAddress ?? "unknown"}`);
+  const rateLimit = await checkLoginRateLimit(`register:${ipAddress ?? "unknown"}`);
   if (!rateLimit.allowed) {
     return { error: "Too many attempts. Please try again in a few minutes." };
   }
@@ -54,7 +54,7 @@ export async function loginAction(_prevState: AuthActionState, formData: FormDat
   const { email, password, rememberMe } = parsed.data;
   const { ipAddress, userAgent } = await getRequestMeta();
 
-  const rateLimit = checkLoginRateLimit(`${email}:${ipAddress ?? "unknown"}`);
+  const rateLimit = await checkLoginRateLimit(`${email}:${ipAddress ?? "unknown"}`);
   if (!rateLimit.allowed) {
     return { error: "Too many login attempts. Please try again in a few minutes." };
   }

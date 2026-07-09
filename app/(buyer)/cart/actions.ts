@@ -21,7 +21,7 @@ export async function checkoutAction(_prevState: CheckoutActionState): Promise<C
   let redirectUrl: string;
 
   try {
-    if (!checkCheckoutRateLimit(session.userId).allowed) throw new RateLimitError();
+    if (!(await checkCheckoutRateLimit(session.userId)).allowed) throw new RateLimitError();
 
     const items = await assertCartItemsStillAvailable(session.userId);
     if (items.length === 0) return { error: "Your cart is empty" };

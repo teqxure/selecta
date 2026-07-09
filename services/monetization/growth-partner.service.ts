@@ -19,8 +19,11 @@ export async function applyForGrowthPartner(sellerId: string, message: string) {
     throw new ValidationError("You already have an application in progress");
   }
 
+  const cleaned = sanitizeOptionalText(message);
+  if (cleaned && cleaned.length > 2000) throw new ValidationError("Message is too long (2000 characters max)");
+
   return db.growthPartnerApplication.create({
-    data: { sellerId, message: sanitizeOptionalText(message), status: "PENDING" },
+    data: { sellerId, message: cleaned, status: "PENDING" },
   });
 }
 

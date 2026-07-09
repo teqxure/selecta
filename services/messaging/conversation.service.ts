@@ -76,6 +76,7 @@ export interface SendMessageResult {
 export async function sendMessage(conversationId: string, senderId: string, body: string, imageUrl?: string): Promise<SendMessageResult> {
   const trimmed = sanitizeText(body);
   if (!trimmed && !imageUrl) throw new ValidationError("Message can't be empty");
+  if (trimmed.length > 5000) throw new ValidationError("Message is too long (5000 characters max)");
 
   const sender = await db.user.findUniqueOrThrow({ where: { id: senderId }, select: { messagingRestrictedAt: true } });
   if (sender.messagingRestrictedAt) {
@@ -205,6 +206,7 @@ export async function reportConversation(conversationId: string, userId: string,
   await getConversationForParticipant(conversationId, userId);
   const trimmedReason = sanitizeText(reason);
   if (!trimmedReason) throw new ValidationError("Tell us what happened before reporting.");
+  if (trimmedReason.length > 1000) throw new ValidationError("Reason is too long (1000 characters max)");
 
   const conversation = await db.conversation.update({
     where: { id: conversationId },

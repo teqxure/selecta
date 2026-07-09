@@ -25,7 +25,7 @@ export async function sendBuyerMessageAction(
   formData: FormData,
 ): Promise<SendMessageState> {
   const session = await requireAuth();
-  if (!checkMessageRateLimit(session.userId).allowed) throw new RateLimitError();
+  if (!(await checkMessageRateLimit(session.userId)).allowed) throw new RateLimitError();
 
   try {
     const imageUrl = String(formData.get("imageUrl") ?? "") || undefined;
@@ -66,7 +66,7 @@ export async function checkoutOfferAction(offerId: string, _prevState: CheckoutO
 
   let redirectUrl: string;
   try {
-    if (!checkCheckoutRateLimit(session.userId).allowed) throw new RateLimitError();
+    if (!(await checkCheckoutRateLimit(session.userId)).allowed) throw new RateLimitError();
 
     const offer = await getAcceptedOfferForCheckout(offerId, session.userId);
 

@@ -17,6 +17,10 @@ export async function removeFromCart(userId: string, productId: string) {
   await db.cartItem.deleteMany({ where: { userId, productId } });
 }
 
+export function getCartItemCount(userId: string) {
+  return db.cartItem.count({ where: { userId } });
+}
+
 export function listCartItems(userId: string) {
   return db.cartItem.findMany({
     where: { userId },

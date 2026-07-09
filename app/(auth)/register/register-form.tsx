@@ -5,6 +5,7 @@ import Link from "next/link";
 import { registerAction, type AuthActionState } from "@/app/(auth)/actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
 import { GoogleAuthButton, AuthDivider } from "@/components/auth/GoogleAuthButton";
@@ -71,8 +72,8 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
           </div>
           <Input name="email" type="email" label="Email" required />
           <Input name="phone" type="tel" label="Phone number" placeholder="0801 234 5678" required />
-          <Input name="password" type="password" label="Password" required />
-          <Input name="confirmPassword" type="password" label="Confirm password" required />
+          <PasswordInput name="password" label="Password" required />
+          <PasswordInput name="confirmPassword" label="Confirm password" required />
           <FormError message={state.error} />
           <SubmitButton className="w-full">
             {role === "SELLER" ? "Create seller account" : "Create account"}

@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { forcePasswordResetAction, type ForcePasswordResetActionState } from "../actions";
-import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
 
@@ -14,9 +14,8 @@ export function ForcePasswordResetForm({ userId }: { userId: string }) {
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <input type="hidden" name="userId" value={userId} />
-      <Input
+      <PasswordInput
         name="newPassword"
-        type="password"
         label="New temporary password"
         helperText="At least 8 characters. Share this with the account holder yourself — Selecta doesn't email it."
         required

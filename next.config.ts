@@ -19,6 +19,7 @@ function resolveR2Hostname(): string {
 }
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   images: {
     remotePatterns: [
       {

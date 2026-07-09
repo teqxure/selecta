@@ -18,6 +18,10 @@ import { Hero } from "@/components/marketplace/Hero";
 import { ProductSection } from "@/components/marketplace/ProductSection";
 import { ProductGrid } from "@/components/marketplace/ProductGrid";
 import { StyleCollections } from "@/components/marketplace/StyleCollections";
+import { TrustStrip } from "@/components/marketplace/TrustStrip";
+import { ValuePropGrid } from "@/components/marketplace/ValuePropGrid";
+import { SellCTABanner } from "@/components/marketplace/SellCTABanner";
+import { FAQAccordion } from "@/components/marketplace/FAQAccordion";
 import { ROUTES } from "@/lib/constants/routes";
 
 const BUDGET_CEILING = 10_000;
@@ -37,6 +41,10 @@ export default async function MarketplaceHomePage() {
     topSellers,
     activeListingCount,
     verifiedSellerCount,
+    topLevelCategoryCount,
+    citiesServed,
+    completedOrderCount,
+    averageSellerRating,
   ] = await Promise.all([
     listActiveProducts(1, 8),
     listPremiumFinds(8),
@@ -48,6 +56,14 @@ export default async function MarketplaceHomePage() {
     getTopSellers(8),
     db.product.count({ where: { status: "ACTIVE" } }),
     db.sellerProfile.count({ where: { verificationStatus: "VERIFIED" } }),
+    db.category.count({ where: { isActive: true, parentId: null } }),
+    db.sellerProfile
+      .findMany({ where: { verificationStatus: "VERIFIED", city: { not: null } }, select: { city: true }, distinct: ["city"] })
+      .then((rows) => rows.length),
+    db.order.count({ where: { status: "COMPLETED" } }),
+    db.sellerProfile
+      .aggregate({ where: { verificationStatus: "VERIFIED" }, _avg: { ratingAverage: true } })
+      .then((result) => result._avg.ratingAverage ?? 0),
   ]);
 
   const allIds = [...freshFinds.items, ...premiumFinds, ...underBudget, ...trending, ...nearby, ...recommended].map(
@@ -66,6 +82,13 @@ export default async function MarketplaceHomePage() {
         verifiedSellerCount={verifiedSellerCount}
         locationLabel={locationLabel}
         floatingImages={floatingImages}
+      />
+
+      <TrustStrip
+        categoryCount={topLevelCategoryCount}
+        cityCount={citiesServed}
+        completedOrderCount={completedOrderCount}
+        averageSellerRating={averageSellerRating}
       />
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 pt-10">
@@ -139,6 +162,8 @@ export default async function MarketplaceHomePage() {
           <ProductGrid products={underBudget} savedIds={savedIds} />
         </ProductSection>
 
+        <ValuePropGrid />
+
         {topSellers.length > 0 && (
           <div className="flex flex-col gap-4">
             <h2 className="font-display text-xl font-semibold text-foreground sm:text-2xl">Top sellers</h2>
@@ -164,6 +189,10 @@ export default async function MarketplaceHomePage() {
             </div>
           </div>
         )}
+
+        <SellCTABanner />
+
+        <FAQAccordion />
       </div>
     </div>
   );

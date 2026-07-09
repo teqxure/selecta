@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { Building2, Store, FileText, ShieldCheck } from "lucide-react";
 import { ImageUploadField } from "@/components/forms/ImageUploadField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
@@ -12,8 +11,16 @@ export interface VerificationUploadFormProps {
   defaultShopPhotoUrl?: string;
   defaultIdentityDocumentUrl?: string;
   submitLabel?: string;
-  /** e.g. a "Skip for now" button, only relevant during onboarding. */
-  secondaryAction?: ReactNode;
+  /**
+   * e.g. "Skip for now" during onboarding — rendered as a second submit
+   * button with its own `formAction` inside the SAME <form> (the standard
+   * "multiple submit buttons, one form" pattern), never a nested <form>.
+   * A <form> inside a <form> is invalid HTML; the browser silently drops
+   * the inner one when parsing server-rendered HTML, which is exactly the
+   * kind of server/client DOM mismatch that causes a hydration error.
+   */
+  secondaryActionLabel?: string;
+  secondaryFormAction?: () => void | Promise<void>;
 }
 
 const FIELDS = [
@@ -29,7 +36,8 @@ export function VerificationUploadForm({
   defaultShopPhotoUrl,
   defaultIdentityDocumentUrl,
   submitLabel = "Submit for review",
-  secondaryAction,
+  secondaryActionLabel,
+  secondaryFormAction,
 }: VerificationUploadFormProps) {
   const defaults: Record<string, string | undefined> = {
     businessPhotoUrl: defaultBusinessPhotoUrl,
@@ -68,7 +76,11 @@ export function VerificationUploadForm({
           <FormError message={error} />
 
           <div className="flex flex-col-reverse items-center gap-3 sm:flex-row sm:justify-end">
-            {secondaryAction}
+            {secondaryFormAction && (
+              <SubmitButton formAction={secondaryFormAction} variant="ghost" className="w-full sm:w-auto">
+                {secondaryActionLabel}
+              </SubmitButton>
+            )}
             <SubmitButton className="w-full sm:w-auto">{submitLabel}</SubmitButton>
           </div>
         </form>

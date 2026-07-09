@@ -19,6 +19,7 @@ export interface ProductCardProps {
   likeCount: number;
   isSaved?: boolean;
   canSave?: boolean;
+  isSponsored?: boolean;
 }
 
 /** Fashion-content tile: large image, save button, condition badge, price, location, seller rating. */
@@ -36,6 +37,7 @@ export function ProductCard({
   likeCount,
   isSaved = false,
   canSave = true,
+  isSponsored = false,
 }: ProductCardProps) {
   const format = (value: number) => new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(value);
   const displayPrice = discountPrice ?? price;
@@ -78,6 +80,7 @@ export function ProductCard({
         )}
       </div>
       <CardContent className="p-3">
+        {isSponsored && <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Sponsored</p>}
         <Link href={`/products/${id}`}>
           <p className="truncate text-sm font-medium text-secondary-foreground">{title}</p>
         </Link>

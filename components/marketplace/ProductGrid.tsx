@@ -13,6 +13,7 @@ export interface GridProduct {
   likeCount: number;
   images: { url: string }[];
   seller: { storeName: string | null; businessName: string; ratingAverage: number } | null;
+  isSponsored?: boolean;
 }
 
 interface ProductGridProps {
@@ -52,6 +53,7 @@ export function ProductGrid({
           likeCount={product.likeCount}
           isSaved={savedIds?.has(product.id) ?? false}
           canSave={canSave}
+          isSponsored={product.isSponsored}
         />
       ))}
     </div>

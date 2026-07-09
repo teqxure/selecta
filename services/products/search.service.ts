@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
 import { createNotification } from "@/services/notifications/notification.service";
+import { getActiveBoostProductIds } from "@/services/monetization/boost.service";
 import { PAGINATION } from "@/lib/constants/app";
 import type { SearchFilters } from "@/lib/validators/product";
 import type { PaginatedResult } from "@/types";
@@ -29,6 +30,19 @@ const publicProductInclude = {
 /** Products belonging to a suspended seller are excluded everywhere, not just on their storefront. */
 const notSuspendedSeller = { seller: { verificationStatus: { not: "SUSPENDED" as const } } };
 
+/**
+ * Attaches an honest `isSponsored` flag — true only for products with a
+ * currently-ACTIVE boost campaign right now, checked fresh for every read.
+ * Never a fabricated/injected slot: a "sponsored" label only ever appears
+ * on a product that's already in the result set on its own merits (organic
+ * + boost score), so buyers are never shown something that isn't real.
+ */
+async function attachSponsoredFlag<T extends { id: string }>(items: T[]): Promise<(T & { isSponsored: boolean })[]> {
+  if (items.length === 0) return [];
+  const boosted = await getActiveBoostProductIds(items.map((item) => item.id));
+  return items.map((item) => ({ ...item, isSponsored: boosted.has(item.id) }));
+}
+
 // ---------------------------------------------------------------------------
 // Homepage / browse sections
 // ---------------------------------------------------------------------------
@@ -36,7 +50,7 @@ const notSuspendedSeller = { seller: { verificationStatus: { not: "SUSPENDED" as
 export async function listActiveProducts(
   page = 1,
   pageSize: number = PAGINATION.defaultPageSize,
-): Promise<PaginatedResult<ProductRecord>> {
+): Promise<PaginatedResult<ProductRecord & { isSponsored: boolean }>> {
   const where = { status: "ACTIVE" as const, ...notSuspendedSeller };
   const [items, totalCount] = await Promise.all([
     db.product.findMany({
@@ -49,43 +63,47 @@ export async function listActiveProducts(
     db.product.count({ where }),
   ]);
 
-  return { items, page, pageSize, totalCount, totalPages: Math.ceil(totalCount / pageSize) };
+  return { items: await attachSponsoredFlag(items), page, pageSize, totalCount, totalPages: Math.ceil(totalCount / pageSize) };
 }
 
-export function listPremiumFinds(limit = 12) {
-  return db.product.findMany({
+export async function listPremiumFinds(limit = 12) {
+  const items = await db.product.findMany({
     where: { status: "ACTIVE", conditionGrade: "SELECTA_GOLD", ...notSuspendedSeller },
     include: cardInclude,
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+  return attachSponsoredFlag(items);
 }
 
-export function listUnderBudget(maxPrice: number, limit = 12) {
-  return db.product.findMany({
+export async function listUnderBudget(maxPrice: number, limit = 12) {
+  const items = await db.product.findMany({
     where: { status: "ACTIVE", price: { lte: maxPrice }, ...notSuspendedSeller },
     include: cardInclude,
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+  return attachSponsoredFlag(items);
 }
 
-export function listTrending(limit = 12) {
-  return db.product.findMany({
+export async function listTrending(limit = 12) {
+  const items = await db.product.findMany({
     where: { status: "ACTIVE", ...notSuspendedSeller },
     include: cardInclude,
     orderBy: [{ viewCount: "desc" }, { likeCount: "desc" }],
     take: limit,
   });
+  return attachSponsoredFlag(items);
 }
 
-export function listNearby(city: string, limit = 12) {
-  return db.product.findMany({
+export async function listNearby(city: string, limit = 12) {
+  const items = await db.product.findMany({
     where: { status: "ACTIVE", city: { equals: city, mode: "insensitive" }, ...notSuspendedSeller },
     include: cardInclude,
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+  return attachSponsoredFlag(items);
 }
 
 /** Top categories by lifetime view volume among active listings — no hardcoded list, purely derived. */
@@ -170,17 +188,19 @@ export async function getRecommendedForYou(userId: string | undefined, limit = 1
     .findMany({ where: { userId, type: "VIEW" }, select: { productId: true }, distinct: ["productId"] })
     .then((rows) => rows.map((r) => r.productId));
 
-  const recommended = await db.product.findMany({
-    where: {
-      status: "ACTIVE",
-      categoryId: { in: topCategoryIds },
-      id: { notIn: alreadyViewedProductIds },
-      ...notSuspendedSeller,
-    },
-    include: cardInclude,
-    orderBy: [{ viewCount: "desc" }, { createdAt: "desc" }],
-    take: limit,
-  });
+  const recommended = await attachSponsoredFlag(
+    await db.product.findMany({
+      where: {
+        status: "ACTIVE",
+        categoryId: { in: topCategoryIds },
+        id: { notIn: alreadyViewedProductIds },
+        ...notSuspendedSeller,
+      },
+      include: cardInclude,
+      orderBy: [{ viewCount: "desc" }, { createdAt: "desc" }],
+      take: limit,
+    }),
+  );
 
   if (recommended.length < limit) {
     const filler = await listTrending(limit - recommended.length);
@@ -238,11 +258,21 @@ function buildSearchWhere(filters: SearchFilters): Prisma.ProductWhereInput {
   };
 }
 
+/**
+ * A flat, capped bonus for an actively-boosted product — roughly 15-20% of
+ * a typical organic score, chosen so a well-boosted mediocre listing gets a
+ * moderate lift, never enough on its own to beat a genuinely strong organic
+ * result (title match + trusted seller + real popularity easily clears 100).
+ * Boost must improve visibility, not buy a top spot outright.
+ */
+const BOOST_SCORE_BONUS = 25;
+
 function scoreCandidate(
   product: ProductRecord,
   filters: SearchFilters,
   now: number,
   recentViewCounts: Map<string, number>,
+  boostedProductIds: Set<string>,
 ) {
   let score = 0;
 
@@ -270,6 +300,7 @@ function scoreCandidate(
   }
   score += Math.min(Math.log10(product.likeCount + 1) * 6, 15);
   if (product.isFeatured) score += 10;
+  if (boostedProductIds.has(product.id)) score += BOOST_SCORE_BONUS;
 
   return score;
 }
@@ -278,7 +309,7 @@ export async function searchProducts(
   filters: SearchFilters,
   pageSize: number = PAGINATION.defaultPageSize,
   viewer?: { userId?: string; ipAddress?: string },
-): Promise<PaginatedResult<ProductRecord>> {
+): Promise<PaginatedResult<ProductRecord & { isSponsored: boolean }>> {
   const where = buildSearchWhere(filters);
   const skip = (filters.page - 1) * pageSize;
 
@@ -319,9 +350,10 @@ export async function searchProducts(
       recentViewCounts = new Map(recent.map((r) => [r.productId, r._count]));
     }
 
+    const boostedProductIds = await getActiveBoostProductIds(candidates.map((c) => c.id));
     const now = Date.now();
     const ranked = candidates
-      .map((product) => ({ product, score: scoreCandidate(product, filters, now, recentViewCounts) }))
+      .map((product) => ({ product, score: scoreCandidate(product, filters, now, recentViewCounts, boostedProductIds) }))
       .sort((a, b) => b.score - a.score)
       .map((r) => r.product);
 
@@ -356,7 +388,13 @@ export async function searchProducts(
     });
   }
 
-  return { items, page: filters.page, pageSize, totalCount, totalPages: Math.ceil(totalCount / pageSize) };
+  return {
+    items: await attachSponsoredFlag(items),
+    page: filters.page,
+    pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
 }
 
 export async function getPublicProductById(id: string) {
@@ -391,19 +429,23 @@ export async function getSimilarProducts(product: { id: string; categoryId: stri
     take: 60,
   });
 
+  const boostedIds = await getActiveBoostProductIds(candidates.map((c) => c.id));
   const now = Date.now();
-  return candidates
+  const ranked = candidates
     .map((candidate) => {
       let score = candidate.categoryId === product.categoryId ? 20 : 0;
       if (product.brand && candidate.brand?.toLowerCase() === product.brand.toLowerCase()) score += 15;
       score += candidate.seller.verificationStatus === "VERIFIED" ? 10 : 0;
       score += Math.min(candidate.seller.ratingAverage, 5) * 2;
       score += Math.max(0, 10 - (now - candidate.createdAt.getTime()) / 86_400_000 / 9);
+      if (boostedIds.has(candidate.id)) score += BOOST_SCORE_BONUS;
       return { candidate, score };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((r) => r.candidate);
+
+  return attachSponsoredFlag(ranked);
 }
 
 export function getSameSellerProducts(sellerId: string, excludeProductId: string, limit = 8) {

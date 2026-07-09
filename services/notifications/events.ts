@@ -36,6 +36,14 @@ export const NOTIFICATION_EVENTS = {
   WITHDRAWAL_REJECTED: { notificationType: "PAYMENT", category: "sellerUpdates", emailTemplateKey: "withdrawal_update" },
   SECURITY_ALERT: { notificationType: "SYSTEM", category: "security", emailTemplateKey: "security_alert" },
   ADMIN_ALERT: { notificationType: "SYSTEM", category: "admin", emailTemplateKey: "admin_alert" },
+  SUBSCRIPTION_STARTED: { notificationType: "PAYMENT", category: "sellerUpdates", emailTemplateKey: "subscription_started" },
+  SUBSCRIPTION_EXPIRING: { notificationType: "SYSTEM", category: "sellerUpdates", emailTemplateKey: "subscription_expiring" },
+  SUBSCRIPTION_EXPIRED: { notificationType: "SYSTEM", category: "sellerUpdates", emailTemplateKey: "subscription_expired" },
+  BOOST_STARTED: { notificationType: "SYSTEM", category: "sellerUpdates", emailTemplateKey: "boost_started" },
+  BOOST_COMPLETED: { notificationType: "SYSTEM", category: "sellerUpdates", emailTemplateKey: "boost_completed" },
+  BOOST_PERFORMANCE_REPORT: { notificationType: "SYSTEM", category: "sellerUpdates" },
+  SELLER_WEEKLY_REPORT: { notificationType: "SYSTEM", category: "sellerUpdates" },
+  SELLER_MONTHLY_REPORT: { notificationType: "SYSTEM", category: "sellerUpdates" },
 } as const satisfies Record<string, NotificationEventConfig>;
 
 export type NotificationEventName = keyof typeof NOTIFICATION_EVENTS;

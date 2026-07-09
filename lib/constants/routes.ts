@@ -35,6 +35,9 @@ export const ROUTES = {
     messages: "/seller/messages",
     message: (id: string) => `/seller/messages/${id}`,
     analytics: "/seller/analytics",
+    growth: "/seller/growth",
+    marketing: "/seller/marketing",
+    growthPartner: "/seller/marketing/growth-partner",
     onboarding: {
       personal: "/seller/onboarding/personal",
       store: "/seller/onboarding/store",
@@ -64,6 +67,10 @@ export const ROUTES = {
     finance: "/admin/finance",
     notifications: "/admin/notifications",
     searchAnalytics: "/admin/search-analytics",
+    plans: "/admin/plans",
+    revenue: "/admin/revenue",
+    growthPartners: "/admin/growth-partners",
+    marketplaceIntelligence: "/admin/marketplace-intelligence",
   },
   notifications: "/notifications",
 } as const;

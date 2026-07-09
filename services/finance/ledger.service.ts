@@ -87,8 +87,30 @@ export function recordAdjustment(tx: DbOrTx, input: LedgerEntryInput) {
   return record(tx, "ADJUSTMENT", input);
 }
 
+/** A seller's subscription payment clearing — positive, 100% platform revenue (no seller split, unlike commission). */
+export function recordSubscriptionRevenue(tx: DbOrTx, input: LedgerEntryInput) {
+  return record(tx, "SUBSCRIPTION_REVENUE", input);
+}
+
+/** A seller paying cash for a boost campaign — positive, 100% platform revenue. */
+export function recordBoostRevenue(tx: DbOrTx, input: LedgerEntryInput) {
+  return record(tx, "BOOST_REVENUE", input);
+}
+
 export function listLedgerEntriesForSeller(sellerId: string, take = 50) {
   return db.ledgerEntry.findMany({ where: { sellerId }, orderBy: { createdAt: "desc" }, take });
+}
+
+/** What a seller has actually paid the platform for subscriptions/boosts — lifetime, summed from the ledger, never a mutable counter. */
+export async function getSellerMonetizationSpend(sellerId: string) {
+  const [subscriptionAgg, boostAgg] = await Promise.all([
+    db.ledgerEntry.aggregate({ where: { sellerId, type: "SUBSCRIPTION_REVENUE" }, _sum: { amount: true } }),
+    db.ledgerEntry.aggregate({ where: { sellerId, type: "BOOST_REVENUE" }, _sum: { amount: true } }),
+  ]);
+  return {
+    subscriptionSpend: Number(subscriptionAgg._sum.amount ?? 0),
+    boostSpend: Number(boostAgg._sum.amount ?? 0),
+  };
 }
 
 export function listLedgerEntriesForOrder(orderId: string) {

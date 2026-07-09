@@ -16,12 +16,22 @@ import { getProductStatusCounts } from "@/services/products/product.service";
 import { getPendingOrdersCountForSeller, listOrdersForSeller } from "@/services/orders/order.service";
 import { getUnreadCountForSeller } from "@/services/messaging/conversation.service";
 import { getSellerBalances } from "@/services/payments/payment.service";
+import { getStoreHealthScore, getSellerRecommendations } from "@/services/insights/seller-insight.service";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DEFAULT_CURRENCY } from "@/lib/constants/app";
+
+const HEALTH_LABEL_TONE = {
+  Excellent: "success",
+  Good: "accent",
+  Fair: "warning",
+  "Needs improvement": "danger",
+} as const;
+
+const IMPACT_TONE = { high: "danger", medium: "warning", low: "neutral" } as const;
 
 export default async function SellerDashboardPage() {
   const session = await requireAuth();
@@ -51,6 +61,10 @@ export default async function SellerDashboardPage() {
     getMostViewedProducts(profile.id, 1),
     listOrdersForSeller(profile.id),
     getSellerBalances(profile.id),
+  ]);
+  const [health, recommendations] = await Promise.all([
+    getStoreHealthScore(profile.id),
+    getSellerRecommendations(profile.id),
   ]);
 
   const format = (value: number) =>
@@ -97,6 +111,64 @@ export default async function SellerDashboardPage() {
             Request withdrawal
           </Button>
         </Link>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Store Health</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <p className="font-display text-3xl font-semibold text-foreground">{health.overall}/100</p>
+              <Badge tone={HEALTH_LABEL_TONE[health.label]}>{health.label}</Badge>
+            </div>
+            <div className="flex flex-col gap-2">
+              {(
+                [
+                  ["Profile", health.categories.profile],
+                  ["Products", health.categories.products],
+                  ["Customer Experience", health.categories.customerExperience],
+                ] as const
+              ).map(([label, value]) => (
+                <div key={label} className="flex items-center gap-3">
+                  <span className="w-36 shrink-0 text-xs text-muted-foreground">{label}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${value}%` }} />
+                  </div>
+                  <span className="w-10 shrink-0 text-right text-xs font-medium text-foreground">{value}%</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recommended actions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {recommendations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">You&apos;re all caught up — nothing needs attention right now.</p>
+            ) : (
+              recommendations.slice(0, 5).map((rec) => (
+                <Link
+                  key={rec.title}
+                  href={rec.actionUrl}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:border-accent/50"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-secondary-foreground">{rec.title}</p>
+                    <p className="text-xs text-muted-foreground">{rec.reason}</p>
+                  </div>
+                  <Badge tone={IMPACT_TONE[rec.impact]} className="shrink-0">
+                    {rec.impact}
+                  </Badge>
+                </Link>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {insights.length > 0 && (

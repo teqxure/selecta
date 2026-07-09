@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Eye, Heart, Share2, TrendingUp, Search, MousePointerClick } from "lucide-react";
+import { Eye, Heart, Share2, TrendingUp, Search, MousePointerClick, ShoppingBag, Repeat, Wallet, Package } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
@@ -11,28 +11,52 @@ import {
   getCategoryPerformanceInsight,
   getSearchInsights,
 } from "@/services/analytics/analytics.service";
+import {
+  getPerformanceOverview,
+  getProductPerformanceBreakdown,
+  getInventoryIntelligence,
+  getCustomerInsights,
+} from "@/services/insights/seller-insight.service";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 
 export default async function SellerAnalyticsPage() {
   const session = await requireRole(Role.SELLER);
   const profile = await getSellerProfileByUserId(session.userId);
 
-  const [analytics, mostViewed, bestCategory, revenueHistory, insight, searchInsights] = await Promise.all([
+  const [
+    analytics,
+    mostViewed,
+    bestCategory,
+    revenueHistory,
+    insight,
+    searchInsights,
+    overview,
+    productPerformance,
+    inventory,
+    customerInsights,
+  ] = await Promise.all([
     getSellerAnalytics(profile.id),
     getMostViewedProducts(profile.id, 5),
     getBestSellingCategory(profile.id),
     getRevenueHistory(profile.id, 14),
     getCategoryPerformanceInsight(profile.id),
     getSearchInsights(profile.id),
+    getPerformanceOverview(profile.id, 30),
+    getProductPerformanceBreakdown(profile.id, 5),
+    getInventoryIntelligence(profile.id),
+    getCustomerInsights(profile.id),
   ]);
 
   const revenueBars = revenueHistory.slice(-7).map((entry) => ({
     label: new Date(entry.date).toLocaleDateString("en-NG", { weekday: "short" }),
     value: Math.round(entry.revenue),
   }));
+  const format = (value: number) =>
+    new Intl.NumberFormat("en-NG", { style: "currency", currency: DEFAULT_CURRENCY, maximumFractionDigits: 0 }).format(value);
 
   return (
     <div className="flex flex-col gap-6">
@@ -46,6 +70,16 @@ export default async function SellerAnalyticsPage() {
           </CardContent>
         </Card>
       )}
+
+      <div>
+        <h2 className="font-display mb-3 text-lg font-semibold text-foreground">Performance overview (last 30 days)</h2>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard label="Revenue" icon={Wallet} value={format(overview.revenue)} trend={overview.revenueGrowthPct !== null ? { direction: overview.revenueGrowthPct >= 0 ? "up" : "down", label: `${Math.abs(overview.revenueGrowthPct).toFixed(0)}% vs prior 30d` } : undefined} />
+          <StatCard label="Orders" icon={ShoppingBag} value={String(overview.orderCount)} trend={overview.orderGrowthPct !== null ? { direction: overview.orderGrowthPct >= 0 ? "up" : "down", label: `${Math.abs(overview.orderGrowthPct).toFixed(0)}% vs prior 30d` } : undefined} />
+          <StatCard label="Average order value" icon={TrendingUp} value={format(overview.averageOrderValue)} />
+          <StatCard label="Returning customers" icon={Repeat} value={`${(overview.returningCustomerRate * 100).toFixed(0)}%`} />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total views" icon={Eye} value={analytics.totalViews.toLocaleString()} />
@@ -80,6 +114,46 @@ export default async function SellerAnalyticsPage() {
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">No sales yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>What&apos;s selling</CardTitle>
+            <CardDescription>Your top listings by revenue.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {productPerformance.topPerformers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sales yet.</p>
+            ) : (
+              productPerformance.topPerformers.map((p) => (
+                <div key={p.productId} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate text-secondary-foreground">{p.title}</span>
+                  <span className="shrink-0 font-medium text-foreground">{format(p.revenue)}</span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Needs attention</CardTitle>
+            <CardDescription>Active listings with views but zero sales.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {productPerformance.underperformers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nothing flagged right now.</p>
+            ) : (
+              productPerformance.underperformers.map((p) => (
+                <div key={p.productId} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate text-secondary-foreground">{p.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{p.viewCount} views · quality {p.qualityScore}/100</span>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>
@@ -134,6 +208,106 @@ export default async function SellerAnalyticsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div>
+        <h2 className="font-display mb-3 text-lg font-semibold text-foreground">Discovery & engagement (last 30 days)</h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label="Search impressions" value={overview.discovery.impressions.toLocaleString()} />
+          <StatCard label="Direct views" value={overview.discovery.directViews.toLocaleString()} />
+          <StatCard label="Saves" value={overview.discovery.saves.toLocaleString()} />
+          <StatCard label="Shares" value={overview.discovery.shares.toLocaleString()} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-accent" strokeWidth={2} />
+              Inventory intelligence
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-secondary-foreground">Fastest selling</p>
+              {inventory.fastMovers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Not enough sales yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-1 text-sm">
+                  {inventory.fastMovers.slice(0, 3).map((p) => (
+                    <li key={p.productId} className="flex justify-between text-secondary-foreground">
+                      <span className="truncate">{p.title}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{p.daysToSell}d to sell</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {inventory.slowMovers.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-secondary-foreground">Needs attention</p>
+                <ul className="flex flex-col gap-1 text-sm">
+                  {inventory.slowMovers.slice(0, 3).map((p) => (
+                    <li key={p.productId} className="flex justify-between text-secondary-foreground">
+                      <span className="truncate">{p.title}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{p.daysListed}d listed, {p.viewCount} views</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {inventory.restockSuggestions.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-secondary-foreground">List more of what sells</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {inventory.restockSuggestions.map((s) => (
+                    <Badge key={s.label} tone="accent">
+                      {s.label} · sold {s.count}×
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer insights</CardTitle>
+            <CardDescription>Aggregate only — never individual buyer details.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard label="Total customers" value={String(customerInsights.totalCustomers)} />
+              <StatCard label="Returning" value={`${(customerInsights.returningRate * 100).toFixed(0)}%`} />
+            </div>
+            {customerInsights.topLocations.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-secondary-foreground">Top buyer locations</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {customerInsights.topLocations.map((l) => (
+                    <Badge key={l.location} tone="neutral">
+                      {l.location} · {l.count}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {customerInsights.topCategoriesPurchased.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-secondary-foreground">What they buy</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {customerInsights.topCategoriesPurchased.map((c) => (
+                    <Badge key={c.categoryName} tone="neutral">
+                      {c.categoryName} · {c.count}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

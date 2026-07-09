@@ -66,6 +66,15 @@ const envSchema = z.object({
    * host-only cookie (the default) is strictly safer, so this is opt-in.
    */
   COOKIE_DOMAIN: z.string().min(1).optional(),
+
+  /**
+   * Shared secret for Vercel Cron-triggered routes (subscription/boost
+   * expiry sweep). Vercel sends this as `Authorization: Bearer <value>`
+   * automatically once it's set as a project env var — see
+   * app/api/cron/monetization-sweep/route.ts. Unset means the route always
+   * rejects (fail closed), since it's a real state-changing operation.
+   */
+  CRON_SECRET: z.string().min(16).optional(),
 });
 
 function loadEnv() {

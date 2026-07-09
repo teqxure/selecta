@@ -239,19 +239,21 @@ model User {
   messages        Message[]
   searchQueries   SearchQuery[]
 
-  transactionsAsBuyer    Transaction[]          @relation("BuyerTransactions")
-  orderStatusChanges     OrderStatusHistory[]
-  withdrawalReviews      Withdrawal[]           @relation("WithdrawalReviewer")
-  disputesAsBuyer        Dispute[]              @relation("BuyerDisputes")
-  disputesResolved       Dispute[]              @relation("ResolvedDisputes")
-  systemSettingsUpdated  SystemSettings[]
-  integrationSettingsSet IntegrationSetting[]
-  commissionRulesCreated CommissionRule[]
-  featureFlagsUpdated    FeatureFlag[]
-  ledgerEntries          LedgerEntry[]
-  ledgerEntriesRecorded  LedgerEntry[]          @relation("LedgerEntryActor")
-  emailTemplatesUpdated  EmailTemplate[]
-  notificationDeliveries NotificationDelivery[]
+  transactionsAsBuyer       Transaction[]              @relation("BuyerTransactions")
+  orderStatusChanges        OrderStatusHistory[]
+  withdrawalReviews         Withdrawal[]               @relation("WithdrawalReviewer")
+  disputesAsBuyer           Dispute[]                  @relation("BuyerDisputes")
+  disputesResolved          Dispute[]                  @relation("ResolvedDisputes")
+  systemSettingsUpdated     SystemSettings[]
+  integrationSettingsSet    IntegrationSetting[]
+  commissionRulesCreated    CommissionRule[]
+  featureFlagsUpdated       FeatureFlag[]
+  ledgerEntries             LedgerEntry[]
+  ledgerEntriesRecorded     LedgerEntry[]              @relation("LedgerEntryActor")
+  emailTemplatesUpdated     EmailTemplate[]
+  notificationDeliveries    NotificationDelivery[]
+  subscriptionPlansCreated  SubscriptionPlan[]
+  growthPartnerApplications GrowthPartnerApplication[]
 
   @@index([role])
   @@index([status])
@@ -283,16 +285,20 @@ model SellerProfile {
   createdAt             DateTime                 @default(now()) @map("created_at")
   updatedAt             DateTime                 @updatedAt @map("updated_at")
 
-  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agent         User?               @relation("SellerAgent", fields: [agentId], references: [id], onDelete: SetNull)
-  products      Product[]
-  verification  SellerVerification?
-  followers     StoreFollow[]
-  conversations Conversation[]
-  transactions  Transaction[]
-  withdrawals   Withdrawal[]
-  disputes      Dispute[]
-  ledgerEntries LedgerEntry[]
+  user                     User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent                    User?                      @relation("SellerAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  products                 Product[]
+  verification             SellerVerification?
+  followers                StoreFollow[]
+  conversations            Conversation[]
+  transactions             Transaction[]
+  withdrawals              Withdrawal[]
+  disputes                 Dispute[]
+  ledgerEntries            LedgerEntry[]
+  subscriptions            SellerSubscription[]
+  boostCampaigns           BoostCampaign[]
+  monetizationPayments     MonetizationPayment[]
+  growthPartnerApplication GrowthPartnerApplication[]
 
   @@index([verificationStatus])
   @@index([agentId])
@@ -471,15 +477,16 @@ model Product {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
-  seller      SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  category    Category       @relation("ProductCategory", fields: [categoryId], references: [id])
-  subcategory Category?      @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
-  images      ProductImage[]
-  orderItems  OrderItem[]
-  reviews     Review[]
-  savedBy     SavedProduct[]
-  events      ProductEvent[]
-  cartItems   CartItem[]
+  seller         SellerProfile   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category       Category        @relation("ProductCategory", fields: [categoryId], references: [id])
+  subcategory    Category?       @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  images         ProductImage[]
+  orderItems     OrderItem[]
+  reviews        Review[]
+  savedBy        SavedProduct[]
+  events         ProductEvent[]
+  cartItems      CartItem[]
+  boostCampaigns BoostCampaign[]
 
   @@index([sellerId])
   @@index([categoryId])
@@ -751,6 +758,13 @@ enum LedgerEntryType {
   WITHDRAWAL_PAID
   REFUND
   ADJUSTMENT
+  /// Platform revenue from a seller subscription payment — 100% platform
+  /// revenue, no seller split (unlike COMMISSION_EARNED, which is a cut of
+  /// a buyer's order).
+  SUBSCRIPTION_REVENUE
+  /// Platform revenue from a seller paying cash (not subscription credits)
+  /// for a product boost campaign.
+  BOOST_REVENUE
 }
 
 /// Append-only financial journal — the authoritative source for every
@@ -1050,6 +1064,10 @@ model SystemSettings {
   /// than failing the send outright.
   notificationSenderName    String            @default("Selecta") @map("notification_sender_name")
   notificationSenderEmail   String?           @map("notification_sender_email")
+  /// Cash price per day for a product boost campaign when a seller has no
+  /// (or insufficient) subscription boost credits to cover it — Super
+  /// Admin-configurable, never hardcoded in application code.
+  boostPricePerDay          Decimal           @default(500) @map("boost_price_per_day") @db.Decimal(10, 2)
   updatedById               String?           @map("updated_by_id")
   updatedAt                 DateTime          @updatedAt @map("updated_at")
 
@@ -1133,4 +1151,180 @@ model FeatureFlag {
   updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@map("feature_flags")
+}
+
+// ---------------------------------------------------------------------------
+// Monetization — seller subscriptions, product boosts, growth partner
+// ---------------------------------------------------------------------------
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum BoostGoal {
+  VIEWS
+  SAVES
+  SALES
+}
+
+enum BoostStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MonetizationPurpose {
+  SUBSCRIPTION
+  BOOST
+}
+
+enum MonetizationPaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum GrowthApplicationStatus {
+  PENDING
+  REVIEWING
+  ACCEPTED
+  REJECTED
+}
+
+/// Super Admin-controlled membership tier. Never hardcoded in application
+/// code — every price/limit/benefit a plan grants lives on this row, read
+/// at the point of enforcement (see services/monetization/subscription.service.ts).
+model SubscriptionPlan {
+  id                   String   @id @default(cuid())
+  name                 String   @unique
+  slug                 String   @unique
+  monthlyPrice         Decimal  @default(0) @map("monthly_price") @db.Decimal(10, 2)
+  durationDays         Int      @default(30) @map("duration_days")
+  /// Null = unlimited active listings.
+  maxProducts          Int?     @map("max_products")
+  boostCreditsPerCycle Int      @default(0) @map("boost_credits_per_cycle")
+  hasAnalyticsAccess   Boolean  @default(false) @map("has_analytics_access")
+  hasFeaturedStore     Boolean  @default(false) @map("has_featured_store")
+  hasPrioritySupport   Boolean  @default(false) @map("has_priority_support")
+  /// The plan applied to a seller with no subscription history at all.
+  /// Enforced to be unique-among-active by application code (like
+  /// IntegrationSetting.isPrimary), not a DB constraint.
+  isDefault            Boolean  @default(false) @map("is_default")
+  isActive             Boolean  @default(true) @map("is_active")
+  sortOrder            Int      @default(0) @map("sort_order")
+  createdById          String?  @map("created_by_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  createdBy     User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  subscriptions SellerSubscription[]
+
+  @@index([isActive])
+  @@map("subscription_plans")
+}
+
+/// One row per subscription period a seller has ever had — history is kept
+/// (never overwritten), so "current" means the single row with
+/// status ACTIVE (enforced by application code, not a DB constraint, since
+/// a seller legitimately accumulates many EXPIRED/CANCELLED rows over time).
+model SellerSubscription {
+  id                    String             @id @default(cuid())
+  sellerId              String             @map("seller_id")
+  planId                String             @map("plan_id")
+  status                SubscriptionStatus @default(PENDING)
+  startedAt             DateTime?          @map("started_at")
+  expiresAt             DateTime?          @map("expires_at")
+  boostCreditsRemaining Int                @default(0) @map("boost_credits_remaining")
+  cancelledAt           DateTime?          @map("cancelled_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  seller   SellerProfile         @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan      @relation(fields: [planId], references: [id])
+  payments MonetizationPayment[]
+
+  @@index([sellerId, status])
+  @@index([status, expiresAt])
+  @@map("seller_subscriptions")
+}
+
+/// A seller's paid visibility campaign for one product. Performance
+/// (impressions/views/saves/orders) is deliberately NOT stored here — it's
+/// derived on read from the existing ProductEvent stream and OrderItem
+/// table, scoped to [startDate, endDate], so there's exactly one source of
+/// truth for view/save counts instead of a second counter that could drift.
+model BoostCampaign {
+  id           String      @id @default(cuid())
+  sellerId     String      @map("seller_id")
+  productId    String      @map("product_id")
+  goal         BoostGoal
+  durationDays Int         @map("duration_days")
+  creditsCost  Int         @map("credits_cost")
+  status       BoostStatus @default(PENDING_PAYMENT)
+  startDate    DateTime?   @map("start_date")
+  endDate      DateTime?   @map("end_date")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  seller   SellerProfile         @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  product  Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  payments MonetizationPayment[]
+
+  @@index([sellerId])
+  @@index([productId, status])
+  @@index([status, endDate])
+  @@map("boost_campaigns")
+}
+
+/// Payment record for subscription/boost charges — deliberately separate
+/// from `Payment` (which is 1:1 with an Order and drives escrow/commission
+/// splitting). A subscription or boost charge is 100% platform revenue with
+/// no seller split, so it doesn't belong on that model. Reuses the same
+/// provider integration layer and the same append-only ledger underneath.
+model MonetizationPayment {
+  id                String                    @id @default(cuid())
+  sellerId          String                    @map("seller_id")
+  purpose           MonetizationPurpose
+  subscriptionId    String?                   @map("subscription_id")
+  boostCampaignId   String?                   @map("boost_campaign_id")
+  amount            Decimal                   @db.Decimal(10, 2)
+  currency          String                    @default("NGN")
+  provider          String
+  providerReference String?                   @unique @map("provider_reference")
+  status            MonetizationPaymentStatus @default(PENDING)
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+
+  seller        SellerProfile       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  subscription  SellerSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  boostCampaign BoostCampaign?      @relation(fields: [boostCampaignId], references: [id], onDelete: SetNull)
+
+  @@index([sellerId])
+  @@index([status])
+  @@map("monetization_payments")
+}
+
+/// Phase-10 placeholder for the future "Selecta Growth Partner" managed
+/// service — intentionally minimal (application intake only, no delivery
+/// workflow yet).
+model GrowthPartnerApplication {
+  id                String                  @id @default(cuid())
+  sellerId          String                  @map("seller_id")
+  status            GrowthApplicationStatus @default(PENDING)
+  message           String?
+  assignedManagerId String?                 @map("assigned_manager_id")
+  notes             String?
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  assignedManager User?         @relation(fields: [assignedManagerId], references: [id], onDelete: SetNull)
+
+  @@index([sellerId])
+  @@index([status])
+  @@map("growth_partner_applications")
 }

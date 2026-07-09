@@ -18,6 +18,10 @@ import {
   UserCog,
   Bell,
   Search,
+  Rocket,
+  Wallet2,
+  Sparkles,
+  BrainCircuit,
 } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
@@ -60,8 +64,17 @@ const ADMIN_NAV_GROUPS = [
     items: [
       { label: "Finance", href: ROUTES.admin.finance, icon: LineChart, permission: "reports.view" },
       { label: "Search analytics", href: ROUTES.admin.searchAnalytics, icon: Search, permission: "reports.view" },
+      { label: "Marketplace intelligence", href: ROUTES.admin.marketplaceIntelligence, icon: BrainCircuit, permission: "reports.view" },
       { label: "Withdrawals", href: ROUTES.admin.withdrawals, icon: Banknote, permission: "payouts.manage" },
       { label: "Commissions", href: ROUTES.admin.commissions, icon: Percent, permission: "SUPER_ADMIN_ONLY" },
+    ],
+  },
+  {
+    label: "Monetization",
+    items: [
+      { label: "Revenue", href: ROUTES.admin.revenue, icon: Wallet2, permission: "reports.view" },
+      { label: "Plans", href: ROUTES.admin.plans, icon: Rocket, permission: "SUPER_ADMIN_ONLY" },
+      { label: "Growth partners", href: ROUTES.admin.growthPartners, icon: Sparkles, permission: "SUPER_ADMIN_ONLY" },
     ],
   },
   {

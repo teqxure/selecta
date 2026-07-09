@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3 } from "lucide-react";
+import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3, Rocket, Megaphone } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
 import { currentUser } from "@/lib/auth/current-user";
@@ -24,6 +24,8 @@ const SELLER_NAV_GROUPS: DashboardNavGroup[] = [
     label: "Growth & finance",
     items: [
       { label: "Analytics", href: ROUTES.seller.analytics, icon: <BarChart3 {...iconProps} /> },
+      { label: "Growth Center", href: ROUTES.seller.growth, icon: <Rocket {...iconProps} /> },
+      { label: "Marketing Center", href: ROUTES.seller.marketing, icon: <Megaphone {...iconProps} /> },
       { label: "Wallet", href: ROUTES.seller.wallet, icon: <Wallet {...iconProps} /> },
     ],
   },

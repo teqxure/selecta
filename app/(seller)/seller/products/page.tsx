@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { listProductsBySeller, getProductStatusCounts } from "@/services/products/product.service";
+import { getProductQualityScoresForSeller } from "@/services/insights/product-insight.service";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -33,9 +34,10 @@ export default async function SellerProductsPage({
   const activeStatus = STATUS_TABS.find((tab) => tab.value === status)?.value;
 
   const profile = await getSellerProfileByUserId(session.userId);
-  const [products, counts] = await Promise.all([
+  const [products, counts, qualityScores] = await Promise.all([
     listProductsBySeller(profile.id, { q, status: activeStatus }),
     getProductStatusCounts(profile.id),
+    getProductQualityScoresForSeller(profile.id),
   ]);
 
   return (
@@ -114,7 +116,15 @@ export default async function SellerProductsPage({
                   {product.status === "REJECTED" && product.rejectionReason && (
                     <p className="mt-1 text-xs text-red-600">Rejected: {product.rejectionReason}</p>
                   )}
+                  {qualityScores.get(product.id)?.suggestions[0] && (
+                    <p className="mt-1 truncate text-xs text-muted-foreground">💡 {qualityScores.get(product.id)!.suggestions[0]}</p>
+                  )}
                 </div>
+                {qualityScores.has(product.id) && (
+                  <Badge tone={qualityScores.get(product.id)!.score >= 70 ? "success" : qualityScores.get(product.id)!.score >= 50 ? "warning" : "danger"}>
+                    Quality {qualityScores.get(product.id)!.score}
+                  </Badge>
+                )}
                 <Badge tone={STATUS_TONE[product.status]}>{product.status.replace("_", " ")}</Badge>
                 <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                   {product.status === "DRAFT" && (

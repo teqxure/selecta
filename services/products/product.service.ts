@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { sanitizeOptionalText, sanitizeText } from "@/lib/security/sanitize";
 import { createNotification } from "@/services/notifications/notification.service";
+import { assertCanPublishAnotherProduct } from "@/services/monetization/subscription.service";
 import { PAGINATION } from "@/lib/constants/app";
 import type { ProductDetailsInput, ProductImagesInput, ProductLocationInput, ProductPricingInput } from "@/lib/validators/product";
 
@@ -160,6 +161,7 @@ export async function publishProduct(sellerProfileId: string, productId: string)
   if (product.title === "Untitled listing") throw new ValidationError("Add a title before publishing");
   if (Number(product.price) <= 0) throw new ValidationError("Set a price before publishing");
   if (imageCount < MIN_IMAGES) throw new ValidationError(`Add at least ${MIN_IMAGES} photos before publishing`);
+  await assertCanPublishAnotherProduct(sellerProfileId);
 
   return db.product.update({ where: { id: productId }, data: { status: "PENDING_REVIEW" } });
 }

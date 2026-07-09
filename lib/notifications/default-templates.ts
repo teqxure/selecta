@@ -82,4 +82,29 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplateDefault> = {
     subject: "Selecta HQ: {{alertTitle}}",
     bodyHtml: `<p>{{message}}</p>`,
   },
+  subscription_started: {
+    label: "Subscription started",
+    subject: "Welcome to Selecta {{planName}}",
+    bodyHtml: `<p>Hi {{customerName}},</p><p>Your <strong>{{planName}}</strong> subscription is now active. It renews on {{expiresAt}}.</p>`,
+  },
+  subscription_expiring: {
+    label: "Subscription expiring soon",
+    subject: "Your {{planName}} subscription expires soon",
+    bodyHtml: `<p>Hi {{customerName}},</p><p>Your <strong>{{planName}}</strong> subscription expires on {{expiresAt}}. Renew from your Growth Center to keep your benefits.</p>`,
+  },
+  subscription_expired: {
+    label: "Subscription expired",
+    subject: "Your {{planName}} subscription has expired",
+    bodyHtml: `<p>Hi {{customerName}},</p><p>Your <strong>{{planName}}</strong> subscription has expired and your account has moved to the free plan. Renew anytime from your Growth Center.</p>`,
+  },
+  boost_started: {
+    label: "Boost campaign started",
+    subject: "Your boost campaign for {{productTitle}} is live",
+    bodyHtml: `<p>Hi {{customerName}},</p><p>Your boost campaign for <strong>{{productTitle}}</strong> is now active and will run until {{endDate}}.</p>`,
+  },
+  boost_completed: {
+    label: "Boost campaign completed",
+    subject: "Your boost campaign for {{productTitle}} has ended",
+    bodyHtml: `<p>Hi {{customerName}},</p><p>Your boost campaign for <strong>{{productTitle}}</strong> has ended. Check your Marketing Center for the full performance report.</p>`,
+  },
 };

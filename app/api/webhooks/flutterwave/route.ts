@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { getIntegrationSettingByProvider, getDecryptedSecret } from "@/services/platform/integration-settings.service";
 import { verifyFlutterwaveSignature } from "@/services/payments/webhook-verification";
 import { confirmPaymentSuccess, markPaymentFailed } from "@/services/payments/payment.service";
+import { confirmSubscriptionPayment, markSubscriptionPaymentFailed } from "@/services/monetization/subscription.service";
+import { confirmBoostPayment, markBoostPaymentFailed } from "@/services/monetization/boost.service";
 
 export const runtime = "nodejs";
 
@@ -37,19 +39,39 @@ export async function POST(request: Request) {
   };
 
   const payment = await db.payment.findUnique({ where: { id: event.data.tx_ref } });
-  if (!payment) {
+  if (payment) {
+    if (event.data.status !== "successful") {
+      await markPaymentFailed(payment.id);
+      return new Response("Acknowledged", { status: 200 });
+    }
+
+    if (Number(event.data.amount) !== Number(payment.amount)) {
+      return new Response("Amount mismatch", { status: 400 });
+    }
+
+    await confirmPaymentSuccess(payment.id, event.data.flw_ref);
+    return new Response("Acknowledged", { status: 200 });
+  }
+
+  const monetizationPayment = await db.monetizationPayment.findUnique({ where: { id: event.data.tx_ref } });
+  if (!monetizationPayment) {
     return new Response("Unknown payment reference", { status: 404 });
   }
 
   if (event.data.status !== "successful") {
-    await markPaymentFailed(payment.id);
+    if (monetizationPayment.purpose === "SUBSCRIPTION") await markSubscriptionPaymentFailed(monetizationPayment.id);
+    else await markBoostPaymentFailed(monetizationPayment.id);
     return new Response("Acknowledged", { status: 200 });
   }
 
-  if (Number(event.data.amount) !== Number(payment.amount)) {
+  if (Number(event.data.amount) !== Number(monetizationPayment.amount)) {
     return new Response("Amount mismatch", { status: 400 });
   }
 
-  await confirmPaymentSuccess(payment.id, event.data.flw_ref);
+  if (monetizationPayment.purpose === "SUBSCRIPTION") {
+    await confirmSubscriptionPayment(monetizationPayment.id, event.data.flw_ref);
+  } else {
+    await confirmBoostPayment(monetizationPayment.id, event.data.flw_ref);
+  }
   return new Response("Acknowledged", { status: 200 });
 }

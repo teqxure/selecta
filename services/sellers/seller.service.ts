@@ -75,10 +75,21 @@ async function generateUniqueStoreSlug(storeName: string, sellerProfileId: strin
   }
 }
 
+/** Builds the `socialLinks` JSON from optional handle/URL fields, omitting blanks — `undefined` (not an empty object) when nothing was entered, so the column stays `null` rather than `{}`. */
+function buildSocialLinks(input: { instagram?: string; tiktok?: string; facebook?: string }) {
+  const entries = Object.entries({
+    instagram: sanitizeOptionalText(input.instagram),
+    tiktok: sanitizeOptionalText(input.tiktok),
+    facebook: sanitizeOptionalText(input.facebook),
+  }).filter(([, value]) => value !== undefined);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 /** Onboarding step 2: the store itself. */
 export async function completeStoreSetupStep(userId: string, sellerProfileId: string, input: StoreSetupInput) {
   const storeName = sanitizeText(input.storeName);
   const storeSlug = await generateUniqueStoreSlug(storeName, sellerProfileId);
+  const socialLinks = buildSocialLinks(input);
 
   const { count } = await db.sellerProfile.updateMany({
     where: { id: sellerProfileId, userId },
@@ -89,6 +100,11 @@ export async function completeStoreSetupStep(userId: string, sellerProfileId: st
       city: sanitizeText(input.city),
       state: sanitizeText(input.state),
       categoryTags: input.categoryTags,
+      ...(input.logoUrl && { logoUrl: input.logoUrl }),
+      ...(input.bannerUrl && { bannerUrl: input.bannerUrl }),
+      bio: sanitizeOptionalText(input.bio),
+      ...(socialLinks && { socialLinks }),
+      agreementAcceptedAt: new Date(),
       onboardingStep: 3,
     },
   });

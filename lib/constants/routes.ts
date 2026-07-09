@@ -16,6 +16,7 @@ export const ROUTES = {
   store: (slug: string) => `/store/${slug}`,
   messages: "/messages",
   message: (id: string) => `/messages/${id}`,
+  sellerAgreement: "/seller-agreement",
   seller: {
     root: "/seller",
     dashboard: "/seller",

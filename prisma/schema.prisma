@@ -272,13 +272,24 @@ model SellerProfile {
   businessName          String                   @map("business_name")
   storeName             String?                  @map("store_name")
   storeSlug             String?                  @unique @map("store_slug")
+  logoUrl               String?                  @map("logo_url")
   bannerUrl             String?                  @map("banner_url")
   bio                   String?
+  /// Free-form { instagram?, tiktok?, facebook? } handles/URLs shown on the
+  /// public storefront — distinct from the in-message contact-safety system,
+  /// since a public "follow us" link isn't the off-platform-payment/DM
+  /// leakage that system guards against.
+  socialLinks           Json?                    @map("social_links")
   marketLocation        String?                  @map("market_location")
   city                  String?
   state                 String?
   country               String                   @default("Nigeria")
   categoryTags          SellerProductType[]      @map("category_tags")
+  /// Set once, the first time a seller accepts the Seller Agreement during
+  /// onboarding (see app/(buyer)/seller-agreement). Never cleared or
+  /// re-prompted — a version bump to the agreement itself would need its
+  /// own re-acceptance mechanism, not implemented yet.
+  agreementAcceptedAt   DateTime?                @map("agreement_accepted_at")
   verificationStatus    SellerVerificationStatus @default(PENDING) @map("verification_status")
   ratingAverage         Float                    @default(0) @map("rating_average")
   ratingCount           Int                      @default(0) @map("rating_count")

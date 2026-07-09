@@ -26,6 +26,9 @@ export const personalInfoSchema = z.object({
   phone: nigerianPhoneSchema,
 });
 
+/** Checkbox inputs arrive as "on" or are absent from FormData — never "true"/"false". */
+const checkboxSchema = z.preprocess((value) => value === "on" || value === true, z.boolean());
+
 /** Onboarding step 2 — the store itself. */
 export const storeSetupSchema = z.object({
   storeName: z.string().min(2, "Store name must be at least 2 characters").max(80),
@@ -35,6 +38,17 @@ export const storeSetupSchema = z.object({
   categoryTags: z
     .array(z.enum(SELLER_PRODUCT_TYPES))
     .min(1, "Select at least one product type"),
+  logoUrl: z.url().optional().or(z.literal("")),
+  bannerUrl: z.url().optional().or(z.literal("")),
+  bio: z.string().max(500).optional().or(z.literal("")),
+  instagram: z.string().max(100).optional().or(z.literal("")),
+  tiktok: z.string().max(100).optional().or(z.literal("")),
+  facebook: z.string().max(100).optional().or(z.literal("")),
+  orderUpdatesOptIn: checkboxSchema,
+  sellerUpdatesOptIn: checkboxSchema,
+  agreementAccepted: checkboxSchema.refine((value) => value === true, {
+    message: "You must accept the Seller Agreement to continue",
+  }),
 });
 
 /** Onboarding step 3 — verification documents (URLs from a prior presigned upload). */

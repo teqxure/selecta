@@ -6,6 +6,7 @@ export const ROUTES = {
   home: "/",
   login: "/login",
   register: "/register",
+  welcome: "/welcome",
   profile: "/profile",
   orders: "/orders",
   order: (id: string) => `/orders/${id}`,

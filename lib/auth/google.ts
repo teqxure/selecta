@@ -18,7 +18,8 @@ export type GoogleRole = (typeof PUBLIC_REGISTER_ROLES)[number];
 
 export interface GoogleOAuthState {
   nonce: string;
-  role: GoogleRole;
+  /** Absent when the entry point had no intent signal (e.g. the login page's Google button) — the callback defers account creation to /welcome in that case instead of guessing. */
+  role?: GoogleRole;
 }
 
 export interface GoogleProfile {
@@ -39,7 +40,7 @@ function redirectUri() {
   return `${env.NEXT_PUBLIC_APP_URL}/api/auth/google/callback`;
 }
 
-export async function createGoogleOAuthState(role: GoogleRole) {
+export async function createGoogleOAuthState(role?: GoogleRole) {
   const nonce = crypto.randomUUID();
   const token = await new SignJWT({ nonce, role, purpose: "google_oauth_state" })
     .setProtectedHeader({ alg: "HS256" })
@@ -53,9 +54,48 @@ export async function verifyGoogleOAuthState(token: string): Promise<GoogleOAuth
   try {
     const { payload } = await jwtVerify(token, stateSecretKey);
     if (payload.purpose !== "google_oauth_state") return null;
-    if (typeof payload.nonce !== "string" || typeof payload.role !== "string") return null;
-    if (!PUBLIC_REGISTER_ROLES.includes(payload.role as GoogleRole)) return null;
-    return { nonce: payload.nonce, role: payload.role as GoogleRole };
+    if (typeof payload.nonce !== "string") return null;
+    if (payload.role !== undefined) {
+      if (typeof payload.role !== "string" || !PUBLIC_REGISTER_ROLES.includes(payload.role as GoogleRole)) return null;
+      return { nonce: payload.nonce, role: payload.role as GoogleRole };
+    }
+    return { nonce: payload.nonce };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Carries a verified Google profile across the redirect to /welcome for a
+ * brand-new signup with no intent signal — nothing is written to the DB
+ * until the user picks Shop/Sell there. Same trust model and expiry window
+ * as the OAuth state token above (it's a direct continuation of the same
+ * round trip), just a distinct `purpose` claim.
+ */
+export async function createPendingGoogleSignupToken(profile: GoogleProfile) {
+  const token = await new SignJWT({ ...profile, purpose: "google_pending_signup" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + STATE_MAX_AGE_SECONDS)
+    .sign(stateSecretKey);
+  return token;
+}
+
+export async function verifyPendingGoogleSignupToken(token: string): Promise<GoogleProfile | null> {
+  try {
+    const { payload } = await jwtVerify(token, stateSecretKey);
+    if (payload.purpose !== "google_pending_signup") return null;
+    if (typeof payload.googleId !== "string" || typeof payload.email !== "string") return null;
+    if (typeof payload.firstName !== "string" || typeof payload.lastName !== "string") return null;
+    if (typeof payload.emailVerified !== "boolean") return null;
+    return {
+      googleId: payload.googleId,
+      email: payload.email,
+      emailVerified: payload.emailVerified,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      avatarUrl: typeof payload.avatarUrl === "string" ? payload.avatarUrl : undefined,
+    };
   } catch {
     return null;
   }

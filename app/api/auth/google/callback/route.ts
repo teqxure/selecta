@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { verifyGoogleOAuthState, exchangeGoogleCode, verifyGoogleIdToken } from "@/lib/auth/google";
-import { findOrCreateGoogleUser, recordLoginHistory } from "@/services/users/user.service";
+import { verifyGoogleOAuthState, exchangeGoogleCode, verifyGoogleIdToken, createPendingGoogleSignupToken } from "@/lib/auth/google";
+import { findGoogleUser, createGoogleUser, recordLoginHistory } from "@/services/users/user.service";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { establishSession } from "@/services/users/session.service";
 import { notify } from "@/services/notifications/notify.service";
 import { getRequestMeta } from "@/lib/security/request-meta";
 import { ROUTES } from "@/lib/constants/routes";
 import { ROLE_HOME_ROUTE, Role, UserStatus } from "@/lib/constants/roles";
+import { PENDING_GOOGLE_SIGNUP_COOKIE_NAME } from "@/lib/constants/app";
+import { cookieOptions } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
@@ -39,7 +41,18 @@ export async function GET(request: Request) {
     return loginFailure(request, "google_failed");
   }
 
-  const user = await findOrCreateGoogleUser(profile, state.role);
+  const existingUser = await findGoogleUser(profile);
+
+  if (!existingUser && !state.role) {
+    // Brand-new account with no intent signal (e.g. the login page's Google
+    // button) — defer creation to /welcome instead of guessing a role.
+    const pendingToken = await createPendingGoogleSignupToken(profile);
+    const response = NextResponse.redirect(new URL(ROUTES.welcome, request.url));
+    response.cookies.set(PENDING_GOOGLE_SIGNUP_COOKIE_NAME, pendingToken, { ...cookieOptions, maxAge: 10 * 60 });
+    return response;
+  }
+
+  const user = existingUser ?? (await createGoogleUser(profile, state.role!));
 
   if (user.status !== UserStatus.ACTIVE) {
     await recordLoginHistory(user.id, false, { reason: `ACCOUNT_${user.status}`, ipAddress, userAgent });

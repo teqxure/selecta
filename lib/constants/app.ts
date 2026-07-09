@@ -9,6 +9,9 @@ export const PAGINATION = {
 
 export const SESSION_COOKIE_NAME = "selecta_session";
 
+/** Carries a verified-but-not-yet-created Google profile across the redirect to /welcome. */
+export const PENDING_GOOGLE_SIGNUP_COOKIE_NAME = "selecta_pending_google_signup";
+
 /** "Remember me" session lifetime. */
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 

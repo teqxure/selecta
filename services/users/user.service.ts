@@ -78,12 +78,12 @@ export function getUserByEmail(email: string) {
 /**
  * Google sign-in entry point. Resolution order: an existing Google-linked
  * account wins outright; otherwise a matching email links Google onto that
- * account (password login keeps working alongside it); otherwise a brand
- * new account is created with the role the user picked before starting the
- * OAuth redirect. Email is trusted as verified here because it comes from
- * Google's signed ID token, not user input.
+ * account (password login keeps working alongside it); otherwise `null` —
+ * caller decides whether to create (role already known) or defer to the
+ * /welcome intent picker (role not yet known). Email is trusted as verified
+ * here because it comes from Google's signed ID token, not user input.
  */
-export async function findOrCreateGoogleUser(profile: GoogleProfile, intendedRole: GoogleRole) {
+export async function findGoogleUser(profile: GoogleProfile) {
   const existingByGoogleId = await db.user.findUnique({ where: { googleId: profile.googleId } });
   if (existingByGoogleId) return existingByGoogleId;
 
@@ -99,35 +99,54 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile, intendedRol
     });
   }
 
-  const user = await db.$transaction(async (tx) => {
-    const created = await tx.user.create({
-      data: {
-        email: profile.email,
-        googleId: profile.googleId,
-        firstName: profile.firstName || "Selecta",
-        lastName: profile.lastName || "Member",
-        avatarUrl: profile.avatarUrl,
-        role: intendedRole,
-        emailVerifiedAt: new Date(),
-      },
-    });
+  return null;
+}
 
-    if (intendedRole === Role.SELLER) {
-      await tx.sellerProfile.create({
+/**
+ * Creates a brand-new account for a Google profile that `findGoogleUser`
+ * confirmed doesn't exist yet. Two tabs completing the same OAuth handshake
+ * at once could both reach this after both saw `null` — the `P2002` catch
+ * below re-resolves to whichever row actually landed instead of throwing.
+ */
+export async function createGoogleUser(profile: GoogleProfile, intendedRole: GoogleRole) {
+  let user;
+  try {
+    user = await db.$transaction(async (tx) => {
+      const created = await tx.user.create({
         data: {
-          userId: created.id,
-          businessName: `${created.firstName} ${created.lastName}`,
-          onboardingStep: 1,
+          email: profile.email,
+          googleId: profile.googleId,
+          firstName: profile.firstName || "Selecta",
+          lastName: profile.lastName || "Member",
+          avatarUrl: profile.avatarUrl,
+          role: intendedRole,
+          emailVerifiedAt: new Date(),
         },
       });
-    }
 
-    await tx.userActivity.create({
-      data: { userId: created.id, action: "ACCOUNT_CREATED", metadata: { role: intendedRole, via: "google" } },
+      if (intendedRole === Role.SELLER) {
+        await tx.sellerProfile.create({
+          data: {
+            userId: created.id,
+            businessName: `${created.firstName} ${created.lastName}`,
+            onboardingStep: 1,
+          },
+        });
+      }
+
+      await tx.userActivity.create({
+        data: { userId: created.id, action: "ACCOUNT_CREATED", metadata: { role: intendedRole, via: "google" } },
+      });
+
+      return created;
     });
-
-    return created;
-  });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      const resolved = await findGoogleUser(profile);
+      if (resolved) return resolved;
+    }
+    throw error;
+  }
 
   await notify({
     event: "USER_REGISTERED",

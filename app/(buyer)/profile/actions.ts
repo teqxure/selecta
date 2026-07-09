@@ -1,12 +1,17 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireActiveUser } from "@/lib/auth/rbac";
+import { requireActiveUser, requireActiveRole } from "@/lib/auth/rbac";
+import { Role } from "@/lib/constants/roles";
 import { updateBuyerProfileSchema, addressSchema } from "@/lib/validators/profile";
 import { updateBuyerProfile } from "@/services/users/user.service";
 import { createAddress, deleteAddress, setDefaultAddress } from "@/services/users/address.service";
 import { updateNotificationPreferences } from "@/services/notifications/preferences.service";
+import { switchToSellerMode } from "@/services/users/role-switch.service";
+import { dismissProfileNudge } from "@/services/users/profile-nudge.service";
+import { reissueSessionCookieWithRole } from "@/lib/auth/session";
 import { isAppError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
 
@@ -77,4 +82,19 @@ export async function updateNotificationPreferencesAction(formData: FormData) {
   });
 
   revalidatePath(ROUTES.profile);
+}
+
+export async function startSellingAction() {
+  const user = await requireActiveRole(Role.BUYER);
+
+  const { destination } = await switchToSellerMode(user.id);
+  await reissueSessionCookieWithRole(Role.SELLER);
+
+  redirect(destination);
+}
+
+export async function dismissProfileNudgeAction() {
+  const user = await requireActiveUser();
+  await dismissProfileNudge(user.id);
+  revalidatePath(ROUTES.orders);
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Search, ShoppingBag, LogOut, Bell } from "lucide-react";
 import { ROUTES } from "@/lib/constants/routes";
+import { Role } from "@/lib/constants/roles";
 import { currentUser } from "@/lib/auth/current-user";
 import { logoutAction } from "@/app/(auth)/actions";
 import { getUnreadNotificationCount } from "@/services/notifications/notification.service";
@@ -33,7 +34,10 @@ export async function Navbar() {
           <Link href={ROUTES.search} className="text-foreground/80 transition-colors hover:text-foreground">
             Explore
           </Link>
-          <Link href={ROUTES.seller.root} className="text-foreground/80 transition-colors hover:text-foreground">
+          <Link
+            href={user?.role === Role.BUYER ? `${ROUTES.profile}#start-selling` : ROUTES.seller.root}
+            className="text-foreground/80 transition-colors hover:text-foreground"
+          >
             Sell
           </Link>
           {user && (

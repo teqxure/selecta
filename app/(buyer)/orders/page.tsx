@@ -3,20 +3,27 @@ import Link from "next/link";
 import { PackageSearch } from "lucide-react";
 import { currentUser } from "@/lib/auth/current-user";
 import { listOrdersForBuyer } from "@/services/orders/order.service";
+import { shouldShowProfileNudge } from "@/services/users/profile-nudge.service";
 import { ROUTES } from "@/lib/constants/routes";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ProfileCompletionBanner } from "@/components/buyer/ProfileCompletionBanner";
 
 export default async function BuyerOrdersPage() {
   const user = await currentUser();
   if (!user) redirect(ROUTES.login);
 
-  const orders = await listOrdersForBuyer(user.id);
+  const [orders, showProfileNudge] = await Promise.all([
+    listOrdersForBuyer(user.id),
+    shouldShowProfileNudge(user.id, user.phone),
+  ]);
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
       <h1 className="font-display text-2xl font-semibold text-foreground">Your orders</h1>
+
+      {showProfileNudge && <ProfileCompletionBanner />}
 
       {orders.length === 0 ? (
         <EmptyState

@@ -3,9 +3,13 @@ import { currentUser } from "@/lib/auth/current-user";
 import { listAddresses } from "@/services/users/address.service";
 import { getNotificationPreferences } from "@/services/notifications/preferences.service";
 import { ROUTES } from "@/lib/constants/routes";
+import { Role } from "@/lib/constants/roles";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
+import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ProfileForm } from "./profile-form";
 import { AddressBook } from "./address-book";
 import { NotificationPreferencesForm } from "./notification-preferences-form";
+import { startSellingAction } from "./actions";
 
 export default async function ProfilePage() {
   const user = await currentUser();
@@ -41,6 +45,23 @@ export default async function ProfilePage() {
         <h2 className="text-lg font-medium text-foreground">Notification preferences</h2>
         <NotificationPreferencesForm preferences={notificationPreferences} />
       </section>
+
+      {user.role === Role.BUYER && (
+        <section id="start-selling" className="flex flex-col gap-3">
+          <h2 className="text-lg font-medium text-foreground">Selling</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle>Start selling on Selecta</CardTitle>
+              <CardDescription>Create a store and start selling — your buyer account stays exactly as it is.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <form action={startSellingAction}>
+                <SubmitButton variant="accent">Start selling</SubmitButton>
+              </form>
+            </CardContent>
+          </Card>
+        </section>
+      )}
     </div>
   );
 }

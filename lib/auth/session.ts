@@ -78,6 +78,32 @@ export async function setSessionCookie(payload: SessionPayload, rememberMe = fal
   cookieStore.set(SESSION_COOKIE_NAME, token, { ...cookieOptions, maxAge });
 }
 
+/**
+ * Re-signs the session cookie with a new `role`, preserving the same
+ * session identity and remaining lifetime — used after a self-service
+ * buyer<->seller switch. Without this, `proxy.ts`'s role gate on `/seller`
+ * reads the *old* role straight off the still-current cookie and bounces
+ * the very next navigation, even though the DB is already correct. Same
+ * technique proxy.ts itself uses for sliding-expiration refresh. No-op if
+ * there's no valid session to re-sign (shouldn't happen for an
+ * authenticated caller, but fails closed rather than throwing).
+ */
+export async function reissueSessionCookieWithRole(newRole: Role) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return;
+
+  const current = await verifySessionTokenDetailed(token);
+  if (!current) return;
+
+  const originalDuration = current.expiresAt - current.issuedAt;
+  const newToken = await createSessionToken(
+    { userId: current.userId, role: newRole, sessionId: current.sessionId },
+    originalDuration,
+  );
+  cookieStore.set(SESSION_COOKIE_NAME, newToken, { ...cookieOptions, maxAge: originalDuration });
+}
+
 /** Call only from a Server Action or Route Handler. */
 export async function clearSessionCookie() {
   const cookieStore = await cookies();

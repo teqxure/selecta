@@ -61,6 +61,17 @@ export function checkCheckoutRateLimit(userId: string) {
   return checkRateLimit(`checkout:${userId}`, 8, 5 * 60);
 }
 
+/**
+ * AI generations: 10 per 5 minutes per seller — a real per-plan monthly cap
+ * is enforced separately by the entitlement engine, but that alone doesn't
+ * stop a burst of rapid-fire calls (each one a real, billed third-party API
+ * call) from running up cost within a single minute; this bounds request
+ * pace regardless of what the monthly limit is set to.
+ */
+export function checkAiGenerateRateLimit(sellerId: string) {
+  return checkRateLimit(`ai-generate:${sellerId}`, 10, 5 * 60);
+}
+
 /** Deletes expired counters — call periodically (see the monetization cron sweep) so this table doesn't grow forever. */
 export async function pruneExpiredRateLimitEntries() {
   const result = await db.rateLimitEntry.deleteMany({ where: { resetAt: { lt: new Date() } } });

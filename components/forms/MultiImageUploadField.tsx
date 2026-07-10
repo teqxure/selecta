@@ -56,7 +56,7 @@ export function MultiImageUploadField({ name, folder, min = 2, max = 10, default
 
   async function uploadFile(key: string, file: File) {
     try {
-      const { uploadUrl, publicUrl } = await getUploadUrlAction(folder, file.type);
+      const { uploadUrl, publicUrl } = await getUploadUrlAction(folder, file.type, file.size);
       const response = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
       if (!response.ok) throw new Error("Upload failed");
       updateSlot(key, { url: publicUrl, uploading: false });

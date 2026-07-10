@@ -62,7 +62,7 @@ export function MessageThread({
     }
     setIsUploading(true);
     try {
-      const { uploadUrl, publicUrl } = await getUploadUrlAction(uploadFolder, file.type);
+      const { uploadUrl, publicUrl } = await getUploadUrlAction(uploadFolder, file.type, file.size);
       const response = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
       if (response.ok) setImageUrl(publicUrl);
     } finally {

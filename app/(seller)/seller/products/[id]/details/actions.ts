@@ -9,8 +9,14 @@ import { updateProductDetails, getOwnedProductWithDetails } from "@/services/pro
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { generateProductDescription } from "@/services/ai/product-writer.service";
 import { db } from "@/lib/db";
+import { checkAiGenerateRateLimit } from "@/lib/security/rate-limit";
 import { ROUTES } from "@/lib/constants/routes";
-import { formatZodError, isAppError } from "@/lib/errors";
+import { formatZodError, isAppError, RateLimitError } from "@/lib/errors";
+
+/** Same per-field caps as productDetailsSchema — this action reads FormData directly rather than through that schema, so the caps must be repeated here. */
+function capped(value: FormDataEntryValue | null, maxLength: number): string {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
 import type { ProductWizardActionState } from "../../new/actions";
 
 export async function updateProductDetailsAction(
@@ -54,10 +60,12 @@ export async function generateProductDescriptionAction(productId: string, formDa
   const user = await requireActiveRole(Role.SELLER);
   const profile = await getSellerProfileByUserId(user.id);
 
+  if (!(await checkAiGenerateRateLimit(profile.id)).allowed) throw new RateLimitError();
+
   // Ownership check — throws if this product isn't this seller's.
   await getOwnedProductWithDetails(profile.id, productId);
 
-  const title = String(formData.get("title") ?? "").trim();
+  const title = capped(formData.get("title"), 120);
   if (!title) return { error: "Add a title first so the AI has something to describe." };
 
   const categoryId = String(formData.get("categoryId") ?? "");
@@ -74,10 +82,10 @@ export async function generateProductDescriptionAction(productId: string, formDa
       title,
       categoryName: category?.name ?? "Fashion item",
       subcategoryName: subcategory?.name ?? undefined,
-      brand: String(formData.get("brand") ?? "") || undefined,
-      color: String(formData.get("color") ?? "") || undefined,
-      material: String(formData.get("material") ?? "") || undefined,
-      gender: String(formData.get("gender") ?? "") || undefined,
+      brand: capped(formData.get("brand"), 60) || undefined,
+      color: capped(formData.get("color"), 40) || undefined,
+      material: capped(formData.get("material"), 60) || undefined,
+      gender: capped(formData.get("gender"), 20) || undefined,
       conditionLabel: CONDITION_GRADE_LABELS[conditionGrade as keyof typeof CONDITION_GRADE_LABELS] ?? undefined,
     });
     return { description };

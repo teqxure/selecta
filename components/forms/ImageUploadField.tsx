@@ -49,7 +49,7 @@ export function ImageUploadField({ name, label, folder, required, helperText, de
     setError(null);
     startTransition(async () => {
       try {
-        const { uploadUrl, publicUrl: url } = await getUploadUrlAction(folder, file.type);
+        const { uploadUrl, publicUrl: url } = await getUploadUrlAction(folder, file.type, file.size);
         const response = await fetch(uploadUrl, {
           method: "PUT",
           headers: { "Content-Type": file.type },

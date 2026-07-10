@@ -1,6 +1,5 @@
 import { MapPin, ShieldCheck, Sparkles } from "lucide-react";
 import { FadeIn } from "@/components/motion/FadeIn";
-import { FloatingCard } from "@/components/marketplace/FloatingCard";
 import { RotatingImage } from "@/components/marketplace/RotatingImage";
 import { HeroCTASwitcher } from "@/components/marketplace/HeroCTASwitcher";
 
@@ -11,14 +10,7 @@ export interface HeroProps {
   floatingImages: string[];
 }
 
-/** Splits the flat image list into one slice per floating card so each card cycles through a distinct set of photos. */
-function chunk(images: string[], size: number, count: number): string[][] {
-  return Array.from({ length: count }, (_, i) => images.slice(i * size, i * size + size)).filter((slice) => slice.length > 0);
-}
-
 export function Hero({ activeListingCount, verifiedSellerCount, locationLabel, floatingImages }: HeroProps) {
-  const [slotA, slotB, slotC] = chunk(floatingImages, 3, 3);
-
   return (
     <section className="bg-grain relative overflow-hidden bg-primary text-primary-foreground">
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-6 py-16 md:grid-cols-12 md:py-24">
@@ -52,23 +44,11 @@ export function Hero({ activeListingCount, verifiedSellerCount, locationLabel, f
           </FadeIn>
         </div>
 
-        <div className="relative hidden h-[420px] md:col-span-5 md:block">
-          {slotA?.length > 0 && (
-            <FloatingCard className="left-4 top-0 h-56 w-40 rotate-[-6deg]" delay={0}>
-              <RotatingImage images={slotA} intervalMs={4500} sizes="160px" />
-            </FloatingCard>
-          )}
-          {slotB?.length > 0 && (
-            <FloatingCard className="right-0 top-10 h-64 w-44 rotate-[5deg]" delay={0.3}>
-              <RotatingImage images={slotB} intervalMs={5500} sizes="176px" />
-            </FloatingCard>
-          )}
-          {slotC?.length > 0 && (
-            <FloatingCard className="bottom-0 left-16 h-52 w-40 rotate-[3deg]" delay={0.6}>
-              <RotatingImage images={slotC} intervalMs={6500} sizes="160px" />
-            </FloatingCard>
-          )}
-        </div>
+        {floatingImages.length > 0 && (
+          <FadeIn delay={0.2} className="relative hidden h-[420px] overflow-hidden rounded-3xl shadow-[var(--shadow-float)] md:col-span-5 md:block md:h-[480px]">
+            <RotatingImage images={floatingImages} intervalMs={5000} sizes="(min-width: 768px) 40vw, 100vw" />
+          </FadeIn>
+        )}
       </div>
     </section>
   );

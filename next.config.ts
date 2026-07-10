@@ -26,6 +26,12 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: resolveR2Hostname(),
       },
+      {
+        // Curated free-license stock imagery for the marketplace hero
+        // (see lib/constants/hero-images.ts) — never user-uploaded content.
+        protocol: "https",
+        hostname: "images.pexels.com",
+      },
     ],
   },
 };

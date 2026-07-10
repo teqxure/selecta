@@ -23,6 +23,7 @@ import { ValuePropGrid } from "@/components/marketplace/ValuePropGrid";
 import { SellCTABanner } from "@/components/marketplace/SellCTABanner";
 import { FAQAccordion } from "@/components/marketplace/FAQAccordion";
 import { ROUTES } from "@/lib/constants/routes";
+import { CURATED_HERO_IMAGES } from "@/lib/constants/hero-images";
 
 const BUDGET_CEILING = 10_000;
 
@@ -70,13 +71,16 @@ export default async function MarketplaceHomePage() {
     (p) => p.id,
   );
   const savedIds = user ? await getSavedProductIds(user.id, allIds) : undefined;
-  // Pulled from several sections for variety — each hero card cycles through
-  // a slice of these, so more real photos here means a livelier collage.
-  const floatingImages = [...new Set(
+  // Real listing photos first, topped up with curated decorative stock so
+  // the hero always has enough variety to cycle through even while the
+  // catalog is small — the pool only gets more real-photo-heavy as more
+  // products get listed.
+  const realHeroImages = [...new Set(
     [...freshFinds.items, ...trending, ...premiumFinds]
       .map((p) => p.images[0]?.url)
       .filter((url): url is string => Boolean(url)),
   )].slice(0, 9);
+  const floatingImages = [...realHeroImages, ...CURATED_HERO_IMAGES];
 
   return (
     <div className="flex flex-col">

@@ -70,10 +70,13 @@ export default async function MarketplaceHomePage() {
     (p) => p.id,
   );
   const savedIds = user ? await getSavedProductIds(user.id, allIds) : undefined;
-  const floatingImages = freshFinds.items
-    .map((p) => p.images[0]?.url)
-    .filter((url): url is string => Boolean(url))
-    .slice(0, 3);
+  // Pulled from several sections for variety — each hero card cycles through
+  // a slice of these, so more real photos here means a livelier collage.
+  const floatingImages = [...new Set(
+    [...freshFinds.items, ...trending, ...premiumFinds]
+      .map((p) => p.images[0]?.url)
+      .filter((url): url is string => Boolean(url)),
+  )].slice(0, 9);
 
   return (
     <div className="flex flex-col">

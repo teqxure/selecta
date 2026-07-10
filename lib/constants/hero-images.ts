@@ -7,7 +7,8 @@
  */
 export const CURATED_HERO_IMAGES = [
   "https://images.pexels.com/photos/28959523/pexels-photo-28959523.jpeg?auto=compress&cs=tinysrgb&w=1600",
-  "https://images.pexels.com/photos/28635266/pexels-photo-28635266.jpeg?auto=compress&cs=tinysrgb&w=1600",
+  "https://images.pexels.com/photos/36058500/pexels-photo-36058500.jpeg?auto=compress&cs=tinysrgb&w=1600",
+  "https://images.pexels.com/photos/28988337/pexels-photo-28988337.jpeg?auto=compress&cs=tinysrgb&w=1600",
   "https://images.pexels.com/photos/6068952/pexels-photo-6068952.jpeg?auto=compress&cs=tinysrgb&w=1600",
   "https://images.pexels.com/photos/3965545/pexels-photo-3965545.jpeg?auto=compress&cs=tinysrgb&w=1600",
 ];

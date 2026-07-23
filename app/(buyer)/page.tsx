@@ -94,8 +94,11 @@ export default async function MarketplaceHomePage() {
       <TrustStrip
         categoryCount={topLevelCategoryCount}
         cityCount={citiesServed}
-        completedOrderCount={completedOrderCount}
-        averageSellerRating={averageSellerRating}
+        // TEMPORARY (per explicit request 2026-07-23): the real completedOrderCount/averageSellerRating
+        // are too low to show yet. Hardcoded here at the call site — not in the query or the
+        // component — so reverting to the real numbers is just restoring the two lines below.
+        completedOrderCount={50}
+        averageSellerRating={5}
       />
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 pt-10">

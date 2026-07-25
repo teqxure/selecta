@@ -24,11 +24,15 @@ const r2PublicHost = hostOf(env.R2_PUBLIC_URL);
 const r2ApiHost = hostOf(env.R2_ENDPOINT) ?? (env.R2_ACCOUNT_ID ? `${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : null);
 
 const imgSrc = ["'self'", "data:", "https://lh3.googleusercontent.com", r2PublicHost ? `https://${r2PublicHost}` : "https://*.r2.dev"];
-const connectSrc = ["'self'", ...(r2ApiHost ? [`https://${r2ApiHost}`] : [])];
+const connectSrc = ["'self'", "https://cloudflareinsights.com", ...(r2ApiHost ? [`https://${r2ApiHost}`] : [])];
 
 const CONTENT_SECURITY_POLICY = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline'`,
+  // Cloudflare auto-injects its Web Analytics beacon on every response when
+  // the site is proxied through Cloudflare — allow-listed explicitly rather
+  // than widened to 'unsafe-inline'-covers-everything, since script-src-elem
+  // falls back to this list for that beacon's <script src> tag.
+  `script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src ${imgSrc.join(" ")}`,
   `font-src 'self' data:`,
@@ -47,7 +51,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   "Content-Security-Policy": CONTENT_SECURITY_POLICY,
 };

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { ImagePlus, X, Loader2 } from "lucide-react";
 import { getUploadUrlAction } from "@/services/storage/storage.actions";
 import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_LABEL } from "@/lib/constants/storage";
+import { compressImageFile } from "@/lib/image-compression";
 import { cn } from "@/lib/utils";
 
 export interface ImageUploadFieldProps {
@@ -49,11 +50,12 @@ export function ImageUploadField({ name, label, folder, required, helperText, de
     setError(null);
     startTransition(async () => {
       try {
-        const { uploadUrl, publicUrl: url } = await getUploadUrlAction(folder, file.type, file.size);
+        const compressed = await compressImageFile(file);
+        const { uploadUrl, publicUrl: url } = await getUploadUrlAction(folder, compressed.type, compressed.size);
         const response = await fetch(uploadUrl, {
           method: "PUT",
-          headers: { "Content-Type": file.type },
-          body: file,
+          headers: { "Content-Type": compressed.type },
+          body: compressed,
         });
         if (!response.ok) throw new Error("Upload failed");
         setPublicUrl(url);

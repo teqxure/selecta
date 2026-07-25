@@ -37,6 +37,11 @@ const CONTENT_SECURITY_POLICY = [
   `img-src ${imgSrc.join(" ")}`,
   `font-src 'self' data:`,
   `connect-src ${connectSrc.join(" ")}`,
+  // Client-side image compression (browser-image-compression, used by the
+  // upload fields) runs its codec off the main thread via a Worker created
+  // from a `blob:` URL — with no worker-src set, that falls back to
+  // script-src, which doesn't allow blob: and silently blocks the worker.
+  `worker-src 'self' blob:`,
   `object-src 'none'`,
   `base-uri 'self'`,
   `form-action 'self'`,

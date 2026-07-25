@@ -5,6 +5,7 @@ import Image from "next/image";
 import { getUploadUrlAction } from "@/services/storage/storage.actions";
 import { IMAGE_KIND_LABELS } from "@/lib/validators/product";
 import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_LABEL } from "@/lib/constants/storage";
+import { compressImageFile } from "@/lib/image-compression";
 import type { ProductImageKind } from "@/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 
@@ -56,8 +57,9 @@ export function MultiImageUploadField({ name, folder, min = 2, max = 10, default
 
   async function uploadFile(key: string, file: File) {
     try {
-      const { uploadUrl, publicUrl } = await getUploadUrlAction(folder, file.type, file.size);
-      const response = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      const compressed = await compressImageFile(file);
+      const { uploadUrl, publicUrl } = await getUploadUrlAction(folder, compressed.type, compressed.size);
+      const response = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": compressed.type }, body: compressed });
       if (!response.ok) throw new Error("Upload failed");
       updateSlot(key, { url: publicUrl, uploading: false });
     } catch {

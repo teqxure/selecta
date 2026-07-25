@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "@/lib/env";
-import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_UPLOAD_SIZE_BYTES } from "@/lib/constants/storage";
+import {
+  ALLOWED_IMAGE_CONTENT_TYPES,
+  MAX_UPLOAD_SIZE_BYTES,
+  ALLOWED_VIDEO_CONTENT_TYPES,
+  MAX_VIDEO_SIZE_BYTES,
+} from "@/lib/constants/storage";
 import { ConflictError, ValidationError } from "@/lib/errors";
 
 /**
@@ -25,7 +30,16 @@ const client = new S3Client({
   },
 });
 
-const UPLOAD_URL_TTL_SECONDS = 60 * 5;
+/**
+ * Per-`kind` upload limits. Video gets a longer presign TTL than images —
+ * a 30MB upload on a slow connection can genuinely take longer than the
+ * 5 minutes that's plenty for an 8MB image, and an expired presigned URL
+ * fails the upload with no useful error for the seller.
+ */
+const UPLOAD_LIMITS = {
+  image: { allowedTypes: ALLOWED_IMAGE_CONTENT_TYPES as readonly string[], maxSizeBytes: MAX_UPLOAD_SIZE_BYTES, ttlSeconds: 60 * 5 },
+  video: { allowedTypes: ALLOWED_VIDEO_CONTENT_TYPES as readonly string[], maxSizeBytes: MAX_VIDEO_SIZE_BYTES, ttlSeconds: 60 * 15 },
+} as const;
 
 /**
  * Returns a presigned PUT URL so the browser can upload directly to
@@ -40,12 +54,14 @@ const UPLOAD_URL_TTL_SECONDS = 60 * 5;
  * check in the upload components (which a caller invoking this action
  * directly could otherwise skip entirely).
  */
-export async function createUploadUrl(folder: string, contentType: string, sizeBytes: number) {
-  if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(contentType as (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number])) {
+export async function createUploadUrl(folder: string, contentType: string, sizeBytes: number, kind: "image" | "video" = "image") {
+  const limits = UPLOAD_LIMITS[kind];
+
+  if (!limits.allowedTypes.includes(contentType)) {
     throw new ValidationError(`Unsupported file type: ${contentType}`);
   }
-  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > MAX_UPLOAD_SIZE_BYTES) {
-    throw new ValidationError(`File is too large — max size is ${(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)).toFixed(0)}MB`);
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > limits.maxSizeBytes) {
+    throw new ValidationError(`File is too large — max size is ${(limits.maxSizeBytes / (1024 * 1024)).toFixed(0)}MB`);
   }
   if (!env.R2_PUBLIC_URL) {
     throw new ConflictError("Object storage public URL is not configured — set R2_PUBLIC_URL");
@@ -60,7 +76,7 @@ export async function createUploadUrl(folder: string, contentType: string, sizeB
     ContentLength: sizeBytes,
   });
 
-  const uploadUrl = await getSignedUrl(client, command, { expiresIn: UPLOAD_URL_TTL_SECONDS });
+  const uploadUrl = await getSignedUrl(client, command, { expiresIn: limits.ttlSeconds });
   const publicUrl = `${env.R2_PUBLIC_URL}/${key}`;
 
   return { uploadUrl, publicUrl, key };

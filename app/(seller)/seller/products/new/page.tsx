@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { createDraftProductAction, type ProductWizardActionState } from "./actions";
 import { MultiImageUploadField } from "@/components/forms/MultiImageUploadField";
+import { VideoUploadField } from "@/components/forms/VideoUploadField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -27,6 +28,12 @@ export default function NewProductPage() {
         <CardContent className="p-5">
           <form action={formAction} className="flex flex-col gap-4">
             <MultiImageUploadField name="images" folder="products" min={2} max={10} />
+            <VideoUploadField
+              name="videoUrl"
+              label="Video (optional)"
+              folder="products"
+              helperText="A short walkthrough or try-on clip can help buyers trust the listing."
+            />
             <FormError message={state.error} />
             <SubmitButton className="w-full">Continue</SubmitButton>
           </form>

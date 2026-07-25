@@ -46,6 +46,7 @@ export async function createDraftProduct(sellerProfileId: string, input: Product
       price: 0,
       city: seller.city,
       state: seller.state,
+      videoUrl: input.videoUrl || null,
       images: {
         create: input.images.map((image, index) => ({ url: image.url, kind: image.kind, position: index })),
       },
@@ -75,6 +76,7 @@ export async function updateProductImages(sellerProfileId: string, productId: st
     await tx.productImage.createMany({
       data: input.images.map((image, index) => ({ productId, url: image.url, kind: image.kind, position: index })),
     });
+    await tx.product.update({ where: { id: productId }, data: { videoUrl: input.videoUrl || null } });
     return tx.product.findUniqueOrThrow({ where: { id: productId }, include: { images: true } });
   });
 }

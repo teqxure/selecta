@@ -25,7 +25,8 @@ export async function updateProductImagesAction(
     return { error: "Something went wrong reading your photos — please try again" };
   }
 
-  const parsed = productImagesSchema.safeParse({ images });
+  const videoUrl = String(formData.get("videoUrl") || "");
+  const parsed = productImagesSchema.safeParse({ images, videoUrl });
   if (!parsed.success) return { error: formatZodError(parsed.error) };
 
   let isDraft = false;

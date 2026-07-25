@@ -8,3 +8,10 @@ export const ALLOWED_IMAGE_CONTENT_TYPES = ["image/jpeg", "image/png", "image/we
 export const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
 
 export const MAX_UPLOAD_SIZE_LABEL = "8MB";
+
+/** "video/quicktime" matters — iPhones export .mov natively. */
+export const ALLOWED_VIDEO_CONTENT_TYPES = ["video/mp4", "video/quicktime", "video/webm"] as const;
+
+export const MAX_VIDEO_SIZE_BYTES = 30 * 1024 * 1024; // 30MB — a useful 15-25s phone clip
+
+export const MAX_VIDEO_SIZE_LABEL = "30MB";

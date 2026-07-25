@@ -57,7 +57,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       )}
 
       <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
-        <ImageGallery images={product.images} title={product.title} />
+        <ImageGallery images={product.images} videoUrl={product.videoUrl} title={product.title} />
 
         <div className="flex flex-col gap-5">
           <div>

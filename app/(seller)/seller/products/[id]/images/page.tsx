@@ -19,6 +19,7 @@ export default async function ProductImagesPage({ params }: { params: Promise<{ 
       <ImagesForm
         productId={id}
         defaultImages={product.images.map((image) => ({ url: image.url, kind: image.kind }))}
+        defaultVideoUrl={product.videoUrl ?? undefined}
         isDraft={product.status === "DRAFT"}
       />
     </div>

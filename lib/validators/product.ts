@@ -37,12 +37,13 @@ export const productImageInputSchema = z.object({
   kind: z.enum(ProductImageKind).default("OTHER"),
 });
 
-/** Step 1 — pictures. Sellers upload straight from their phone. */
+/** Step 1 — pictures (and an optional video). Sellers upload straight from their phone. */
 export const productImagesSchema = z.object({
   images: z
     .array(productImageInputSchema)
     .min(MIN_IMAGES, `Add at least ${MIN_IMAGES} photos so buyers can trust the listing`)
     .max(MAX_IMAGES, `You can add up to ${MAX_IMAGES} photos`),
+  videoUrl: z.url().optional().or(z.literal("")),
 });
 
 /** Step 2 — product details. */

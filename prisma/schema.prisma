@@ -484,6 +484,7 @@ model Product {
   conditionGrade  ConditionGrade @default(SELECTA_CLASSIC) @map("condition_grade")
   status          ProductStatus  @default(DRAFT)
   material        String?
+  videoUrl        String?        @map("video_url")
   city            String?
   state           String?
   market          String?

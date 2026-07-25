@@ -5,6 +5,7 @@ import { updateProductImagesAction } from "./actions";
 import type { ProductWizardActionState } from "../../new/actions";
 import type { ProductImageKind } from "@/generated/prisma/enums";
 import { MultiImageUploadField } from "@/components/forms/MultiImageUploadField";
+import { VideoUploadField } from "@/components/forms/VideoUploadField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -14,10 +15,12 @@ const initialState: ProductWizardActionState = {};
 export function ImagesForm({
   productId,
   defaultImages,
+  defaultVideoUrl,
   isDraft,
 }: {
   productId: string;
   defaultImages: { url: string; kind: ProductImageKind }[];
+  defaultVideoUrl?: string;
   isDraft: boolean;
 }) {
   const boundAction = updateProductImagesAction.bind(null, productId);
@@ -28,6 +31,13 @@ export function ImagesForm({
       <CardContent className="p-5">
         <form action={formAction} className="flex flex-col gap-4">
           <MultiImageUploadField name="images" folder="products" min={2} max={10} defaultImages={defaultImages} />
+          <VideoUploadField
+            name="videoUrl"
+            label="Video (optional)"
+            folder="products"
+            defaultUrl={defaultVideoUrl}
+            helperText="A short walkthrough or try-on clip can help buyers trust the listing."
+          />
           <FormError message={state.error} />
           <SubmitButton className="w-full">{isDraft ? "Continue" : "Save photos"}</SubmitButton>
         </form>

@@ -15,6 +15,9 @@ const cardInclude = {
 
 const MIN_IMAGES = 2;
 
+/** Shared with the review-step server action so it can detect this specific rejection and link to the fix. */
+export const SELLER_NOT_VERIFIED_MESSAGE = "Your store must be verified before you can publish listings";
+
 /**
  * Every mutation below takes the caller's `sellerProfileId` and re-derives
  * the target row scoped to it (`where: { id, sellerId }`) — the ownership
@@ -154,7 +157,7 @@ export async function publishProduct(sellerProfileId: string, productId: string)
   const seller = await db.sellerProfile.findUnique({ where: { id: sellerProfileId } });
   if (!seller) throw new NotFoundError("Seller profile");
   if (seller.verificationStatus !== "VERIFIED") {
-    throw new ValidationError("Your store must be verified before you can publish listings");
+    throw new ValidationError(SELLER_NOT_VERIFIED_MESSAGE);
   }
 
   const product = await getOwnedProduct(sellerProfileId, productId);

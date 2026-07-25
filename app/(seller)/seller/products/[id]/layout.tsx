@@ -5,6 +5,7 @@ import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
 import { getOwnedProductWithDetails } from "@/services/products/product.service";
 import { isAppError } from "@/lib/errors";
+import { VerificationStatusBanner } from "@/components/seller/VerificationStatusBanner";
 import { StepNav } from "./step-nav";
 
 export default async function EditProductLayout({
@@ -29,6 +30,13 @@ export default async function EditProductLayout({
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-6 py-4">
       <StepNav productId={id} isDraft={product.status === "DRAFT"} />
+      {profile.verificationStatus !== "VERIFIED" && (
+        <VerificationStatusBanner
+          verificationStatus={profile.verificationStatus}
+          hasSubmission={!!profile.verification}
+          reviewNotes={profile.verification?.reviewNotes}
+        />
+      )}
       {children}
     </div>
   );

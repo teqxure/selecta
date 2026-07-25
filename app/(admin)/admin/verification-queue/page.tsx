@@ -7,6 +7,14 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { approveVerificationAction, rejectVerificationAction } from "./actions";
 
+/** `SellerProfile.onboardingStep` isn't self-explanatory on its own — spell out what each step means so admins can see exactly where a stalled seller stopped, not just that they did. */
+const ONBOARDING_STEP_LABELS: Record<number, string> = {
+  1: "Just signed up — hasn't started onboarding",
+  2: "Personal info done — store setup pending",
+  3: "Store setup done — never reached verification",
+  4: "Onboarding complete — skipped verification",
+};
+
 export default async function AdminVerificationQueuePage() {
   await requirePermission("vendors.verify");
   const [pending, awaitingSubmission] = await Promise.all([
@@ -99,8 +107,8 @@ export default async function AdminVerificationQueuePage() {
         <div>
           <h2 className="text-lg font-semibold text-foreground">Awaiting submission ({awaitingSubmission.length})</h2>
           <p className="text-sm text-muted-foreground">
-            Sellers who skipped the identity-verification step during onboarding and haven&rsquo;t submitted documents
-            yet — nothing to review here, just visibility into who&rsquo;s stalled.
+            Sellers who haven&rsquo;t submitted verification documents yet — either still mid-onboarding or they
+            reached the end and skipped it. Nothing to review here, just visibility into where each one stopped.
           </p>
         </div>
 
@@ -118,6 +126,7 @@ export default async function AdminVerificationQueuePage() {
                   <tr>
                     <th className="px-4 py-3 font-medium">Store</th>
                     <th className="px-4 py-3 font-medium">Owner</th>
+                    <th className="px-4 py-3 font-medium">Onboarding progress</th>
                     <th className="px-4 py-3 font-medium">Signed up</th>
                   </tr>
                 </thead>
@@ -131,6 +140,9 @@ export default async function AdminVerificationQueuePage() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {seller.user.firstName} {seller.user.lastName} · {seller.user.email}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {ONBOARDING_STEP_LABELS[seller.onboardingStep] ?? `Step ${seller.onboardingStep}`}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{seller.createdAt.toLocaleDateString()}</td>
                     </tr>

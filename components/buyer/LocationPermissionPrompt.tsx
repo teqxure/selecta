@@ -6,6 +6,7 @@ import { ShieldCheck } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { ROUTES } from "@/lib/constants/routes";
+import { getCurrentPositionWithFallback } from "@/lib/geolocation";
 import { grantLocationPermissionAction, denyLocationPermissionAction } from "@/app/(buyer)/actions";
 
 const BENEFITS = [
@@ -25,27 +26,28 @@ const BENEFITS = [
  */
 export function LocationPermissionPrompt() {
   const [open, setOpen] = useState(true);
-  const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState<"idle" | "locating" | "found" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [found, setFound] = useState<{ lat: number; lng: number } | null>(null);
 
   const dismiss = () => setOpen(false);
 
-  const handleAllow = () => {
-    if (!navigator.geolocation) {
+  const handleAllow = async () => {
+    setStatus("locating");
+    setErrorMessage(null);
+    try {
+      const { lat, lng } = await getCurrentPositionWithFallback();
+      setFound({ lat, lng });
+      setStatus("found");
+      await grantLocationPermissionAction(lat, lng);
       dismiss();
-      void denyLocationPermissionAction();
-      return;
+    } catch (error) {
+      // A failed/timed-out fix isn't the same as the user declining — keep
+      // the prompt open so they can retry instead of silently recording
+      // DENIED and never asking again.
+      setStatus("error");
+      setErrorMessage(error instanceof Error ? error.message : "Couldn't get your location.");
     }
-    setPending(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        void grantLocationPermissionAction(position.coords.latitude, position.coords.longitude).then(dismiss);
-      },
-      () => {
-        setPending(false);
-        void denyLocationPermissionAction().then(dismiss);
-      },
-      { enableHighAccuracy: true, timeout: 10_000 },
-    );
   };
 
   const handleNotNow = () => {
@@ -64,9 +66,15 @@ export function LocationPermissionPrompt() {
           </li>
         ))}
       </ul>
+      {status === "found" && found && (
+        <p className="mt-3 text-xs text-[color:var(--color-olive-sage)]">
+          Location found ({found.lat.toFixed(5)}, {found.lng.toFixed(5)}) — saving…
+        </p>
+      )}
+      {status === "error" && errorMessage && <p className="mt-3 text-xs text-red-600">{errorMessage}</p>}
       <div className="mt-6 flex flex-col gap-2">
-        <Button type="button" variant="accent" onClick={handleAllow} disabled={pending}>
-          {pending ? "Locating…" : "Allow location"}
+        <Button type="button" variant="accent" onClick={() => void handleAllow()} disabled={status === "locating"}>
+          {status === "locating" ? "Locating…" : status === "error" ? "Try again" : "Allow location"}
         </Button>
         <Button type="button" variant="outline" onClick={handleNotNow}>
           Not now

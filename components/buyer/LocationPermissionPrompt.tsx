@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { ROUTES } from "@/lib/constants/routes";
 import { getCurrentPositionWithFallback } from "@/lib/geolocation";
+import { reverseGeocodeAction } from "@/app/actions";
 import { grantLocationPermissionAction, denyLocationPermissionAction } from "@/app/(buyer)/actions";
 
 const BENEFITS = [
@@ -28,7 +29,7 @@ export function LocationPermissionPrompt() {
   const [open, setOpen] = useState(true);
   const [status, setStatus] = useState<"idle" | "locating" | "found" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [found, setFound] = useState<{ lat: number; lng: number } | null>(null);
+  const [found, setFound] = useState<{ lat: number; lng: number; placeName: string | null } | null>(null);
 
   const dismiss = () => setOpen(false);
 
@@ -37,10 +38,14 @@ export function LocationPermissionPrompt() {
     setErrorMessage(null);
     try {
       const { lat, lng } = await getCurrentPositionWithFallback();
-      setFound({ lat, lng });
+      setFound({ lat, lng, placeName: null });
       setStatus("found");
+      // Coordinates are saved immediately — the place name is a best-effort
+      // display nicety layered on top and never blocks/invalidates them.
       await grantLocationPermissionAction(lat, lng);
-      dismiss();
+      const placeName = await reverseGeocodeAction(lat, lng).catch(() => null);
+      if (placeName) setFound({ lat, lng, placeName });
+      setTimeout(dismiss, 1200);
     } catch (error) {
       // A failed/timed-out fix isn't the same as the user declining — keep
       // the prompt open so they can retry instead of silently recording
@@ -68,7 +73,7 @@ export function LocationPermissionPrompt() {
       </ul>
       {status === "found" && found && (
         <p className="mt-3 text-xs text-[color:var(--color-olive-sage)]">
-          Location found ({found.lat.toFixed(5)}, {found.lng.toFixed(5)}) — saving…
+          Location found: {found.placeName ?? `${found.lat.toFixed(5)}, ${found.lng.toFixed(5)}`}
         </p>
       )}
       {status === "error" && errorMessage && <p className="mt-3 text-xs text-red-600">{errorMessage}</p>}

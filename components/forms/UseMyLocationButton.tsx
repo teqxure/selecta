@@ -4,11 +4,12 @@ import { useState } from "react";
 import { LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { getCurrentPositionWithFallback } from "@/lib/geolocation";
+import { reverseGeocodeAction } from "@/app/actions";
 
 type LocationState =
   | { status: "idle" }
   | { status: "locating" }
-  | { status: "done"; lat: number; lng: number; accuracy: number }
+  | { status: "done"; lat: number; lng: number; accuracy: number; placeName: string | null }
   | { status: "error"; message: string };
 
 /**
@@ -24,7 +25,11 @@ export function UseMyLocationButton({ onLocated, label = "Use my current locatio
     try {
       const { lat, lng, accuracy } = await getCurrentPositionWithFallback();
       onLocated({ lat, lng });
-      setState({ status: "done", lat, lng, accuracy });
+      setState({ status: "done", lat, lng, accuracy, placeName: null });
+      // Reverse-geocoding is best-effort on top of the already-captured
+      // coordinates — a failed/slow lookup never blocks or invalidates them.
+      const placeName = await reverseGeocodeAction(lat, lng).catch(() => null);
+      if (placeName) setState({ status: "done", lat, lng, accuracy, placeName });
     } catch (error) {
       setState({ status: "error", message: error instanceof Error ? error.message : "Couldn't get your location." });
     }
@@ -40,7 +45,8 @@ export function UseMyLocationButton({ onLocated, label = "Use my current locatio
       </div>
       {state.status === "done" && (
         <span className="text-xs text-[color:var(--color-olive-sage)]">
-          Location found ({state.lat.toFixed(5)}, {state.lng.toFixed(5)}, accurate to ~{Math.round(state.accuracy)}m)
+          {state.placeName ? `Location found: ${state.placeName}` : `Location found (${state.lat.toFixed(5)}, ${state.lng.toFixed(5)})`}
+          {" · "}accurate to ~{Math.round(state.accuracy)}m
         </span>
       )}
       {state.status === "error" && <span className="text-xs text-red-600">{state.message}</span>}

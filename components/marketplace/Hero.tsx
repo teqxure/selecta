@@ -1,4 +1,4 @@
-import { MapPin, ShieldCheck, Sparkles } from "lucide-react";
+import { ShieldCheck, Sparkles } from "lucide-react";
 import { FadeIn } from "@/components/motion/FadeIn";
 import { RotatingImage } from "@/components/marketplace/RotatingImage";
 import { HeroCTASwitcher } from "@/components/marketplace/HeroCTASwitcher";
@@ -6,11 +6,10 @@ import { HeroCTASwitcher } from "@/components/marketplace/HeroCTASwitcher";
 export interface HeroProps {
   activeListingCount: number;
   verifiedSellerCount: number;
-  locationLabel: string;
   floatingImages: string[];
 }
 
-export function Hero({ activeListingCount, verifiedSellerCount, locationLabel, floatingImages }: HeroProps) {
+export function Hero({ activeListingCount, verifiedSellerCount, floatingImages }: HeroProps) {
   return (
     <section className="bg-grain relative overflow-hidden bg-primary text-primary-foreground">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_60%_at_85%_15%,rgba(201,97,35,0.18),transparent_70%)]" />
@@ -21,10 +20,6 @@ export function Hero({ activeListingCount, verifiedSellerCount, locationLabel, f
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
               Nigeria&rsquo;s marketplace for pre-loved fashion
             </p>
-            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/20 bg-primary-foreground/5 px-3 py-1 text-xs font-medium text-primary-foreground/80">
-              <MapPin className="h-3 w-3" strokeWidth={2} />
-              {locationLabel}
-            </span>
           </FadeIn>
 
           <HeroCTASwitcher />

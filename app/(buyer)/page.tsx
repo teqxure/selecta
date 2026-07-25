@@ -98,7 +98,6 @@ export default async function MarketplaceHomePage() {
       <Hero
         activeListingCount={activeListingCount}
         verifiedSellerCount={verifiedSellerCount}
-        locationLabel={locationLabel}
         floatingImages={floatingImages}
       />
 

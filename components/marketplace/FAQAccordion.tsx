@@ -32,9 +32,12 @@ const FAQS = [
 export function FAQAccordion() {
   return (
     <FadeIn className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-      <h2 className="font-display text-center text-xl font-semibold text-foreground sm:text-2xl">
-        Frequently asked questions
-      </h2>
+      <div className="text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Good to know</p>
+        <h2 className="font-display mt-1 text-2xl font-semibold text-foreground sm:text-3xl">
+          Frequently asked questions
+        </h2>
+      </div>
       <div className="flex flex-col divide-y divide-border rounded-2xl border border-border bg-secondary">
         {FAQS.map(({ question, answer }) => (
           <details key={question} className="group px-5 py-4 first:rounded-t-2xl last:rounded-b-2xl">

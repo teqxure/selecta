@@ -13,10 +13,15 @@ export interface HeroProps {
 export function Hero({ activeListingCount, verifiedSellerCount, locationLabel, floatingImages }: HeroProps) {
   return (
     <section className="bg-grain relative overflow-hidden bg-primary text-primary-foreground">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-6 py-16 md:grid-cols-12 md:py-24">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_60%_at_85%_15%,rgba(201,97,35,0.18),transparent_70%)]" />
+
+      <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-6 py-16 md:grid-cols-12 md:py-24">
         <div className="md:col-span-7">
           <FadeIn>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/20 bg-primary-foreground/5 px-3 py-1 text-xs font-medium text-primary-foreground/80">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+              Nigeria&rsquo;s marketplace for pre-loved fashion
+            </p>
+            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/20 bg-primary-foreground/5 px-3 py-1 text-xs font-medium text-primary-foreground/80">
               <MapPin className="h-3 w-3" strokeWidth={2} />
               {locationLabel}
             </span>
@@ -25,14 +30,15 @@ export function Hero({ activeListingCount, verifiedSellerCount, locationLabel, f
           <HeroCTASwitcher />
 
           <FadeIn delay={0.32}>
-            <div className="mt-10 flex flex-wrap gap-6 text-sm text-primary-foreground/70">
+            <div className="mt-10 flex items-center gap-5 text-sm text-primary-foreground/70 sm:gap-6">
               <span className="flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-accent" strokeWidth={2} />
                 <strong className="font-display font-semibold text-primary-foreground">
                   {activeListingCount.toLocaleString()}
                 </strong>{" "}
-                fresh finds in {locationLabel}
+                fresh finds
               </span>
+              <span className="h-8 w-px shrink-0 bg-primary-foreground/15" aria-hidden />
               <span className="flex items-center gap-1.5">
                 <ShieldCheck className="h-4 w-4 text-accent" strokeWidth={2} />
                 <strong className="font-display font-semibold text-primary-foreground">

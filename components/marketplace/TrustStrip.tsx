@@ -18,10 +18,12 @@ export function TrustStrip({ categoryCount, cityCount, completedOrderCount, aver
 
   return (
     <FadeIn className="border-y border-border bg-secondary/60">
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-6 px-6 py-8 sm:grid-cols-4 sm:gap-4">
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-y-6 px-6 py-8 sm:grid-cols-4 sm:divide-x sm:divide-border">
         {stats.map(({ icon: Icon, value, label }) => (
-          <div key={label} className="flex items-center gap-3">
-            <Icon className="h-5 w-5 shrink-0 text-accent" strokeWidth={2} />
+          <div key={label} className="flex items-center gap-3 sm:justify-center sm:px-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/10">
+              <Icon className="h-5 w-5 text-accent" strokeWidth={2} />
+            </span>
             <div className="min-w-0">
               <p className="font-display text-lg font-semibold leading-tight text-foreground sm:text-xl">{value}</p>
               <p className="truncate text-xs text-muted-foreground">{label}</p>

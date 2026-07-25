@@ -52,7 +52,7 @@ export function HeroCTASwitcher() {
       </FadeIn>
 
       <FadeIn delay={0.08}>
-        <h1 className="font-display mt-6 text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="font-display mt-6 text-4xl font-semibold leading-[0.98] tracking-tight sm:text-6xl md:text-[4.25rem]">
           {active.headline}
         </h1>
       </FadeIn>

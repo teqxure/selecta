@@ -4,11 +4,13 @@ import { ArrowRight } from "lucide-react";
 import { FadeIn } from "@/components/motion/FadeIn";
 
 export function ProductSection({
+  eyebrow,
   title,
   subtitle,
   seeAllHref,
   children,
 }: {
+  eyebrow?: string;
   title: string;
   subtitle?: string;
   seeAllHref?: string;
@@ -18,7 +20,8 @@ export function ProductSection({
     <FadeIn className="flex flex-col gap-4">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-semibold text-foreground sm:text-2xl">{title}</h2>
+          {eyebrow && <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{eyebrow}</p>}
+          <h2 className="font-display mt-1 text-2xl font-semibold text-foreground sm:text-3xl">{title}</h2>
           {subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>}
         </div>
         {seeAllHref && (

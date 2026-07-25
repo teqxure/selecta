@@ -6,7 +6,8 @@ import { ROUTES } from "@/lib/constants/routes";
 export function SellCTABanner() {
   return (
     <FadeIn className="bg-grain relative overflow-hidden rounded-3xl bg-primary px-6 py-14 text-center text-primary-foreground sm:px-12 sm:py-20">
-      <h2 className="font-display mx-auto max-w-xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Start selling</p>
+      <h2 className="font-display mx-auto mt-3 max-w-xl text-4xl font-semibold leading-[1.02] tracking-tight sm:text-5xl">
         Turn your closet into cash
       </h2>
       <p className="mx-auto mt-4 max-w-md text-primary-foreground/70">

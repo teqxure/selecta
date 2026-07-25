@@ -250,6 +250,22 @@ export function listPendingVerifications() {
   });
 }
 
+/**
+ * Sellers still sitting at `verificationStatus: PENDING` with no
+ * `SellerVerification` row at all — they skipped the identity-document step
+ * during onboarding (see `skipVerificationStep`) and never came back to
+ * submit, so they'd otherwise be invisible to admins: `listPendingVerifications`
+ * only reads the submission table, not seller status. Nothing to approve or
+ * reject here yet — just visibility into who's stalled.
+ */
+export function listSellersAwaitingSubmission() {
+  return db.sellerProfile.findMany({
+    where: { verificationStatus: "PENDING", verification: null },
+    include: { user: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 async function reviewVerification(
   sellerProfileId: string,
   reviewerId: string,

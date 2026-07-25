@@ -4,7 +4,13 @@ import { createNotification } from "@/services/notifications/notification.servic
 import { notify } from "@/services/notifications/notify.service";
 import { alertAdmins } from "@/services/notifications/admin-alerts.service";
 import { getActiveCommissionRateForCategory } from "@/services/platform/commission.service";
-import { recordCustomerPayment, recordVendorCredit, recordCommissionEarned, recordRefund } from "@/services/finance/ledger.service";
+import {
+  recordCustomerPayment,
+  recordVendorCredit,
+  recordCommissionEarned,
+  recordRefund,
+  recordDeliveryFeeRevenue,
+} from "@/services/finance/ledger.service";
 import { transitionOrderStatusInTx } from "@/services/orders/order-state-machine";
 import { NotFoundError, ValidationError, ConflictError } from "@/lib/errors";
 import type { Prisma } from "@/generated/prisma/client";
@@ -154,6 +160,20 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
       });
 
       created.push({ transaction, userId: entry.userId });
+    }
+
+    // Delivery fee is platform/logistics revenue, not merchandise — it's
+    // charged as part of Payment.amount but deliberately never split into
+    // any seller's Transaction (which only ever covers commission on the
+    // item subtotal above).
+    if (Number(order.deliveryFee) > 0) {
+      await recordDeliveryFeeRevenue(tx, {
+        amount: Number(order.deliveryFee),
+        orderId: payment.orderId,
+        paymentId: payment.id,
+        reference: providerReference,
+        note: "Delivery fee collected",
+      });
     }
 
     await transitionOrderStatusInTx(tx, payment.orderId, { type: "SYSTEM" }, "PAID");

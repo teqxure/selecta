@@ -23,6 +23,10 @@ import {
   Sparkles,
   BrainCircuit,
   ShieldAlert,
+  MapPinned,
+  Truck,
+  SlidersHorizontal,
+  Map,
 } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
@@ -77,6 +81,16 @@ const ADMIN_NAV_GROUPS = [
       { label: "Revenue", href: ROUTES.admin.revenue, icon: Wallet2, permission: "reports.view" },
       { label: "Plans", href: ROUTES.admin.plans, icon: Rocket, permission: "SUPER_ADMIN_ONLY" },
       { label: "Growth partners", href: ROUTES.admin.growthPartners, icon: Sparkles, permission: "SUPER_ADMIN_ONLY" },
+    ],
+  },
+  {
+    label: "Logistics",
+    items: [
+      { label: "Delivery zones", href: ROUTES.admin.logisticsZones, icon: MapPinned, permission: "SUPER_ADMIN_ONLY" },
+      { label: "City pricing", href: ROUTES.admin.logisticsPricing, icon: SlidersHorizontal, permission: "SUPER_ADMIN_ONLY" },
+      { label: "Logistics partners", href: ROUTES.admin.logisticsPartners, icon: Truck, permission: "SUPER_ADMIN_ONLY" },
+      { label: "Delivery rules", href: ROUTES.admin.logisticsRules, icon: Settings, permission: "SUPER_ADMIN_ONLY" },
+      { label: "Delivery heat map", href: ROUTES.admin.logisticsHeatMap, icon: Map, permission: "SUPER_ADMIN_ONLY" },
     ],
   },
   {

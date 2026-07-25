@@ -22,4 +22,9 @@ export interface Address {
   state: string;
   country: string;
   postalCode?: string;
+  area?: string;
+  landmark?: string;
+  notes?: string;
+  latitude?: number;
+  longitude?: number;
 }

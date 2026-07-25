@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import { updateSellerSettingsAction, type SettingsActionState } from "./actions";
 import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
+import { UseMyLocationButton } from "@/components/forms/UseMyLocationButton";
 import { Card, CardContent } from "@/components/ui/Card";
 import { ImageUploadField } from "@/components/forms/ImageUploadField";
 
@@ -16,6 +17,8 @@ export function SellerSettingsForm({
   defaultMarketLocation,
   defaultCity,
   defaultState,
+  defaultArea,
+  hasCoordinates,
   defaultBannerUrl,
 }: {
   defaultStoreName: string;
@@ -23,9 +26,12 @@ export function SellerSettingsForm({
   defaultMarketLocation: string;
   defaultCity: string;
   defaultState: string;
+  defaultArea: string;
+  hasCoordinates: boolean;
   defaultBannerUrl?: string;
 }) {
   const [state, formAction] = useActionState(updateSellerSettingsAction, initialState);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   return (
     <Card>
@@ -45,6 +51,25 @@ export function SellerSettingsForm({
             <Input name="city" label="City" defaultValue={defaultCity} required />
             <Input name="state" label="State" defaultValue={defaultState} required />
           </div>
+          <Input name="area" label="Area/district" placeholder="Gwarinpa…" defaultValue={defaultArea} />
+
+          <div className="flex flex-col gap-1.5">
+            <UseMyLocationButton label="Pin your shop location" onLocated={({ lat, lng }) => setCoords({ lat, lng })} />
+            <p className="text-xs text-muted-foreground">
+              {coords
+                ? "Location pinned — save to apply it."
+                : hasCoordinates
+                  ? "Your shop location is already pinned. Pin again to update it."
+                  : "Pinning your shop helps buyers see accurate distance and delivery pricing."}
+            </p>
+          </div>
+          {coords && (
+            <>
+              <input type="hidden" name="latitude" value={coords.lat} />
+              <input type="hidden" name="longitude" value={coords.lng} />
+            </>
+          )}
+
           <FormError message={state.error} />
           {state.success && <p className="text-sm text-green-700">Saved.</p>}
           <SubmitButton className="w-full">Save changes</SubmitButton>

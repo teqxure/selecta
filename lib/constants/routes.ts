@@ -76,6 +76,11 @@ export const ROUTES = {
     marketplaceIntelligence: "/admin/marketplace-intelligence",
     trustDashboard: "/admin/trust",
     conversation: (id: string) => `/admin/trust/conversations/${id}`,
+    logisticsZones: "/admin/logistics/zones",
+    logisticsPricing: "/admin/logistics/pricing",
+    logisticsPartners: "/admin/logistics/partners",
+    logisticsRules: "/admin/logistics/rules",
+    logisticsHeatMap: "/admin/logistics/heat-map",
   },
   notifications: "/notifications",
 } as const;

@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import { addAddressAction, deleteAddressAction, setDefaultAddressAction, type ProfileActionState } from "./actions";
 import type { listAddresses } from "@/services/users/address.service";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
+import { UseMyLocationButton } from "@/components/forms/UseMyLocationButton";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
@@ -16,6 +17,7 @@ const initialState: ProfileActionState = {};
 
 export function AddressBook({ addresses }: { addresses: AddressRecord[] }) {
   const [state, formAction] = useActionState(addAddressAction, initialState);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -61,11 +63,21 @@ export function AddressBook({ addresses }: { addresses: AddressRecord[] }) {
               <Input name="city" label="City" required />
               <Input name="state" label="State" required />
             </div>
+            <Input name="area" label="Area/district" placeholder="Gwarinpa…" />
+            <Input name="landmark" label="Nearby landmark" placeholder="Behind Zenith Bank…" />
+            <Input name="notes" label="Additional notes" placeholder="Gate colour, floor, delivery instructions…" />
             <Input name="phone" type="tel" label="Phone (for delivery)" />
             <label className="flex items-center gap-2 text-sm text-foreground">
               <input type="checkbox" name="isDefault" className="h-4 w-4 rounded border-border accent-accent" />
               Make this my default address
             </label>
+            <UseMyLocationButton onLocated={({ lat, lng }) => setCoords({ lat, lng })} />
+            {coords && (
+              <>
+                <input type="hidden" name="latitude" value={coords.lat} />
+                <input type="hidden" name="longitude" value={coords.lng} />
+              </>
+            )}
             <FormError message={state.error} />
             <SubmitButton size="sm" variant="secondary">
               Add address

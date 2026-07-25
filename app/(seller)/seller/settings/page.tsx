@@ -34,6 +34,8 @@ export default async function SellerSettingsPage() {
         defaultMarketLocation={profile.marketLocation ?? ""}
         defaultCity={profile.city ?? ""}
         defaultState={profile.state ?? ""}
+        defaultArea={profile.area ?? ""}
+        hasCoordinates={profile.latitude != null && profile.longitude != null}
         defaultBannerUrl={profile.bannerUrl ?? undefined}
       />
     </div>

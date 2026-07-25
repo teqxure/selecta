@@ -142,6 +142,21 @@ enum DeliveryMethod {
   PARTNER
 }
 
+enum LocationPermissionStatus {
+  NOT_ASKED
+  GRANTED
+  DENIED
+}
+
+/// What the buyer chose commercially at checkout — kept separate from
+/// `DeliveryMethod`/`Delivery.courier` (the seller's post-purchase
+/// operational record) rather than renaming that enum's existing values.
+enum DeliveryFulfillmentType {
+  STANDARD
+  EXPRESS
+  PICKUP
+}
+
 enum WithdrawalStatus {
   REQUESTED
   PROCESSING
@@ -193,35 +208,43 @@ enum NotificationType {
 // ---------------------------------------------------------------------------
 
 model User {
-  id                    String     @id @default(cuid())
-  email                 String     @unique
-  phone                 String?    @unique
-  passwordHash          String?    @map("password_hash")
+  id                    String                   @id @default(cuid())
+  email                 String                   @unique
+  phone                 String?                  @unique
+  passwordHash          String?                  @map("password_hash")
   /// Google's stable account identifier ("sub" claim) — set once a user
   /// signs in with Google, whether that creates a brand-new account or
   /// links to an existing email/password one. Never null for a
   /// Google-only account (which also has passwordHash: null).
-  googleId              String?    @unique @map("google_id")
-  firstName             String     @map("first_name")
-  lastName              String     @map("last_name")
-  avatarUrl             String?    @map("avatar_url")
-  role                  Role       @default(BUYER)
-  status                UserStatus @default(ACTIVE)
+  googleId              String?                  @unique @map("google_id")
+  firstName             String                   @map("first_name")
+  lastName              String                   @map("last_name")
+  avatarUrl             String?                  @map("avatar_url")
+  role                  Role                     @default(BUYER)
+  status                UserStatus               @default(ACTIVE)
   /// Individually-granted permission strings — only meaningful when role
   /// is ADMIN. SUPER_ADMIN's authority is implicit (wildcard, never
   /// stored); SELLER/BUYER get a fixed role-wide set defined in code, not
   /// per-user grants. See lib/auth/permissions.ts.
-  permissions           String[]   @default([])
+  permissions           String[]                 @default([])
   city                  String?
   state                 String?
+  /// Ambient "roughly where the buyer is right now" signal for homepage
+  /// personalization — separate from the saved `Address` book. Only ever
+  /// set on an explicit "Allow location" tap or manual refresh, never a
+  /// background/continuous watch.
+  latitude              Float?
+  longitude             Float?
+  locationPermission    LocationPermissionStatus @default(NOT_ASKED) @map("location_permission")
+  locationUpdatedAt     DateTime?                @map("location_updated_at")
   preferences           Json?
-  emailVerifiedAt       DateTime?  @map("email_verified_at")
+  emailVerifiedAt       DateTime?                @map("email_verified_at")
   /// Set by Super Admin to block sending new messages (not a full account
   /// suspension) — see Phase 11's "restrict messaging" admin action.
   /// Checked in conversation.service.ts before every send.
-  messagingRestrictedAt DateTime?  @map("messaging_restricted_at")
-  createdAt             DateTime   @default(now()) @map("created_at")
-  updatedAt             DateTime   @updatedAt @map("updated_at")
+  messagingRestrictedAt DateTime?                @map("messaging_restricted_at")
+  createdAt             DateTime                 @default(now()) @map("created_at")
+  updatedAt             DateTime                 @updatedAt @map("updated_at")
 
   sellerProfile   SellerProfile?
   wallet          Wallet?
@@ -243,23 +266,28 @@ model User {
   messages        Message[]
   searchQueries   SearchQuery[]
 
-  transactionsAsBuyer       Transaction[]              @relation("BuyerTransactions")
-  orderStatusChanges        OrderStatusHistory[]
-  withdrawalReviews         Withdrawal[]               @relation("WithdrawalReviewer")
-  disputesAsBuyer           Dispute[]                  @relation("BuyerDisputes")
-  disputesResolved          Dispute[]                  @relation("ResolvedDisputes")
-  systemSettingsUpdated     SystemSettings[]
-  integrationSettingsSet    IntegrationSetting[]
-  commissionRulesCreated    CommissionRule[]
-  featureFlagsUpdated       FeatureFlag[]
-  ledgerEntries             LedgerEntry[]
-  ledgerEntriesRecorded     LedgerEntry[]              @relation("LedgerEntryActor")
-  emailTemplatesUpdated     EmailTemplate[]
-  notificationDeliveries    NotificationDelivery[]
-  subscriptionPlansCreated  SubscriptionPlan[]
-  growthPartnerApplications GrowthPartnerApplication[]
-  offersAsBuyer             Offer[]                    @relation("BuyerOffers")
-  messageFlags              MessageFlag[]
+  transactionsAsBuyer        Transaction[]              @relation("BuyerTransactions")
+  orderStatusChanges         OrderStatusHistory[]
+  withdrawalReviews          Withdrawal[]               @relation("WithdrawalReviewer")
+  disputesAsBuyer            Dispute[]                  @relation("BuyerDisputes")
+  disputesResolved           Dispute[]                  @relation("ResolvedDisputes")
+  systemSettingsUpdated      SystemSettings[]
+  integrationSettingsSet     IntegrationSetting[]
+  commissionRulesCreated     CommissionRule[]
+  featureFlagsUpdated        FeatureFlag[]
+  ledgerEntries              LedgerEntry[]
+  ledgerEntriesRecorded      LedgerEntry[]              @relation("LedgerEntryActor")
+  emailTemplatesUpdated      EmailTemplate[]
+  notificationDeliveries     NotificationDelivery[]
+  subscriptionPlansCreated   SubscriptionPlan[]
+  growthPartnerApplications  GrowthPartnerApplication[]
+  offersAsBuyer              Offer[]                    @relation("BuyerOffers")
+  messageFlags               MessageFlag[]
+  deliveryZonesUpdated       DeliveryZone[]
+  cityDeliveryPricingUpdated CityDeliveryPricing[]
+  logisticsPartnersUpdated   LogisticsPartner[]
+  deliveryRulesUpdated       DeliveryRule[]
+  deliveryHolidaysCreated    DeliveryHoliday[]
 
   @@index([role])
   @@index([status])
@@ -284,6 +312,15 @@ model SellerProfile {
   city                  String?
   state                 String?
   country               String                   @default("Nigeria")
+  area                  String?
+  latitude              Float?
+  longitude             Float?
+  locationUpdatedAt     DateTime?                @map("location_updated_at")
+  /// Whether this seller offers in-person pickup at all — most do (every
+  /// seller registers a physical market/shop), but a seller can opt out.
+  /// Actual pickup *eligibility* for a given buyer is a computed distance
+  /// check (see delivery-engine.service.ts), not a separate table.
+  offersPickup          Boolean                  @default(true) @map("offers_pickup")
   categoryTags          SellerProductType[]      @map("category_tags")
   /// Set once, the first time a seller accepts the Seller Agreement during
   /// onboarding (see app/(buyer)/seller-agreement). Never cleared or
@@ -363,18 +400,26 @@ model SellerVerification {
 }
 
 model Address {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  label     String?
-  line1     String
-  line2     String?
-  city      String
-  state     String
-  country   String   @default("Nigeria")
-  phone     String?
-  isDefault Boolean  @default(false) @map("is_default")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  label             String?
+  line1             String
+  line2             String?
+  city              String
+  state             String
+  country           String    @default("Nigeria")
+  /// Area/district — a finer grain than city, coarser than a street
+  /// address (e.g. "Gwarinpa" within Abuja).
+  area              String?
+  landmark          String?
+  notes             String?
+  latitude          Float?
+  longitude         Float?
+  locationUpdatedAt DateTime? @map("location_updated_at")
+  phone             String?
+  isDefault         Boolean   @default(false) @map("is_default")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -489,6 +534,13 @@ model Product {
   state           String?
   market          String?
   pickupLocation  String?        @map("pickup_location")
+  /// Denormalized copy of the seller's coordinates at listing time —
+  /// consistent with `city`/`state`/`market`/`pickupLocation` above, which
+  /// already denormalize from `SellerProfile`. Avoids a join on every
+  /// search/homepage distance calculation; refreshed whenever the seller
+  /// updates their location.
+  latitude        Float?
+  longitude       Float?
   viewCount       Int            @default(0) @map("view_count")
   likeCount       Int            @default(0) @map("like_count")
   shareCount      Int            @default(0) @map("share_count")
@@ -520,6 +572,7 @@ model Product {
   @@index([price])
   @@index([viewCount])
   @@index([likeCount])
+  @@index([latitude, longitude])
   @@map("products")
 }
 
@@ -620,7 +673,11 @@ model Order {
   id              String      @id @default(cuid())
   buyerId         String      @map("buyer_id")
   status          OrderStatus @default(CREATED)
+  /// itemsSubtotal + deliveryFee — both auditable line items, never a
+  /// single opaque number. deliveryFee defaults to 0 for pre-existing
+  /// orders created before the delivery engine existed.
   totalAmount     Decimal     @map("total_amount") @db.Decimal(10, 2)
+  deliveryFee     Decimal     @default(0) @map("delivery_fee") @db.Decimal(10, 2)
   currency        String      @default("NGN")
   shippingAddress Json        @map("shipping_address")
   createdAt       DateTime    @default(now()) @map("created_at")
@@ -789,6 +846,10 @@ enum LedgerEntryType {
   /// Platform revenue from a seller paying cash (not subscription credits)
   /// for a product boost campaign.
   BOOST_REVENUE
+  /// The delivery-fee portion of a buyer's payment — positive, 100%
+  /// platform/logistics revenue, never split into a seller's Transaction
+  /// (that only ever covers merchandise commission).
+  DELIVERY_FEE_REVENUE
 }
 
 /// Append-only financial journal — the authoritative source for every
@@ -861,27 +922,36 @@ model Review {
 // ---------------------------------------------------------------------------
 
 model Delivery {
-  id             String         @id @default(cuid())
-  orderId        String         @unique @map("order_id")
-  agentId        String?        @map("agent_id")
-  status         DeliveryStatus @default(PENDING)
-  method         DeliveryMethod @default(MANUAL)
-  address        Json
-  pickupLocation String?        @map("pickup_location")
-  deliveryFee    Decimal?       @map("delivery_fee") @db.Decimal(10, 2)
+  id                 String                  @id @default(cuid())
+  orderId            String                  @unique @map("order_id")
+  agentId            String?                 @map("agent_id")
+  status             DeliveryStatus          @default(PENDING)
+  method             DeliveryMethod          @default(MANUAL)
+  address            Json
+  pickupLocation     String?                 @map("pickup_location")
+  deliveryFee        Decimal?                @map("delivery_fee") @db.Decimal(10, 2)
   /// Courier/logistics partner name — free text today (e.g. "GIG Logistics"),
   /// the natural place to switch to a partner-id FK once real logistics
   /// integrations exist.
-  courier        String?
-  trackingCode   String?        @unique @map("tracking_code")
-  estimatedAt    DateTime?      @map("estimated_at")
-  deliveredAt    DateTime?      @map("delivered_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
+  courier            String?
+  trackingCode       String?                 @unique @map("tracking_code")
+  estimatedAt        DateTime?               @map("estimated_at")
+  deliveredAt        DateTime?               @map("delivered_at")
+  /// The following four columns are the *final chosen* quote from
+  /// `calculateDeliveryQuote`, persisted once at order time — every other
+  /// quote (product page, cart) is computed on demand and never stored.
+  distanceKm         Float?                  @map("distance_km")
+  zoneLabel          String?                 @map("zone_label")
+  estimatedMinutes   Int?                    @map("estimated_minutes")
+  fulfillmentType    DeliveryFulfillmentType @default(STANDARD) @map("fulfillment_type")
+  logisticsPartnerId String?                 @map("logistics_partner_id")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
 
-  order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  agent  User?           @relation("AgentDeliveries", fields: [agentId], references: [id])
-  events DeliveryEvent[]
+  order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  agent            User?             @relation("AgentDeliveries", fields: [agentId], references: [id])
+  logisticsPartner LogisticsPartner? @relation(fields: [logisticsPartnerId], references: [id], onDelete: SetNull)
+  events           DeliveryEvent[]
 
   @@index([agentId])
   @@index([status])
@@ -899,6 +969,123 @@ model DeliveryEvent {
 
   @@index([deliveryId, createdAt])
   @@map("delivery_events")
+}
+
+// ---------------------------------------------------------------------------
+// Smart Delivery Engine (Phase 4.5) — zone/city pricing, partner roster,
+// global thresholds. Never hardcoded in application code; see
+// services/logistics/delivery-engine.service.ts.
+// ---------------------------------------------------------------------------
+
+/// Global distance-band definitions shared across every city — the bands
+/// themselves ("0-2km", "2-5km", ...) rarely change; per-city price on top
+/// of a given band lives in `CityDeliveryPricing`. `maxKm: null` means
+/// unbounded (the top band, e.g. "20km+").
+model DeliveryZone {
+  id          String   @id @default(cuid())
+  label       String   @unique
+  minKm       Float    @map("min_km")
+  maxKm       Float?   @map("max_km")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  updatedById String?  @map("updated_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy   User?                 @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  cityPricing CityDeliveryPricing[]
+
+  @@index([isActive])
+  @@map("delivery_zones")
+}
+
+/// Per-city price for a zone. `city: null` is the platform-default
+/// fallback row for any city without an explicit override — the same
+/// null-means-default convention as `CommissionRule.categoryId`. One row
+/// per (city, zone) is enforced by application code, not a DB constraint —
+/// Postgres unique constraints don't treat multiple NULLs as duplicates,
+/// so a compound unique on a nullable `city` column can't guarantee this
+/// (same reasoning as `SubscriptionPlan.isDefault`/`IntegrationSetting.isPrimary`).
+model CityDeliveryPricing {
+  id          String   @id @default(cuid())
+  city        String?
+  zoneId      String   @map("zone_id")
+  price       Decimal  @db.Decimal(10, 2)
+  currency    String   @default("NGN")
+  isActive    Boolean  @default(true) @map("is_active")
+  updatedById String?  @map("updated_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  zone      DeliveryZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  updatedBy User?        @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([city, zoneId])
+  @@map("city_delivery_pricing")
+}
+
+/// Super Admin-managed roster of external courier/delivery partners.
+/// Data-model only — no live API integration yet (`pricingModel` is a
+/// free-text/JSON placeholder). The natural place `Delivery.courier`
+/// graduates to once a real partner integration exists; kept alongside it
+/// for ad-hoc manual entries not in this roster.
+model LogisticsPartner {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  logoUrl          String?  @map("logo_url")
+  coverageCities   String[] @map("coverage_cities")
+  pricingModel     String?  @map("pricing_model")
+  estimatedMinutes Int?     @map("estimated_minutes")
+  isActive         Boolean  @default(true) @map("is_active")
+  contactPhone     String?  @map("contact_phone")
+  contactEmail     String?  @map("contact_email")
+  notes            String?
+  updatedById      String?  @map("updated_by_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  updatedBy  User?      @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  deliveries Delivery[]
+
+  @@index([isActive])
+  @@map("logistics_partners")
+}
+
+/// Singleton row (fixed id "singleton") — global delivery thresholds,
+/// same pattern as `SystemSettings`.
+model DeliveryRule {
+  id                     String   @id @default("singleton")
+  pickupRadiusKm         Float    @default(3) @map("pickup_radius_km")
+  sameDayRadiusKm        Float    @default(8) @map("same_day_radius_km")
+  sameDayCutoffHour      Int      @default(14) @map("same_day_cutoff_hour")
+  maxDeliveryDistanceKm  Float    @default(50) @map("max_delivery_distance_km")
+  expressAvailable       Boolean  @default(true) @map("express_available")
+  expressSurcharge       Decimal  @default(0) @map("express_surcharge") @db.Decimal(10, 2)
+  emergencyDisableAll    Boolean  @default(false) @map("emergency_disable_all")
+  emergencyDisableReason String?  @map("emergency_disable_reason")
+  updatedById            String?  @map("updated_by_id")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("delivery_rules")
+}
+
+/// Dated overrides — a full holiday calendar can't live on the
+/// `DeliveryRule` singleton since dates are inherently multi-row.
+model DeliveryHoliday {
+  id              String   @id @default(cuid())
+  date            DateTime @db.Date
+  label           String
+  disablesSameDay Boolean  @default(true) @map("disables_same_day")
+  disablesAll     Boolean  @default(false) @map("disables_all")
+  createdById     String?  @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([date])
+  @@map("delivery_holidays")
 }
 
 // ---------------------------------------------------------------------------

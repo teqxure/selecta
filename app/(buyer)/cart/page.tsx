@@ -2,20 +2,65 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { ShoppingBag, ShieldCheck } from "lucide-react";
 import { currentUser } from "@/lib/auth/current-user";
+import { db } from "@/lib/db";
 import { listCartItems } from "@/services/products/cart.service";
+import { listAddresses } from "@/services/users/address.service";
+import { calculateDeliveryQuote, resolveBuyerCoordinates } from "@/services/logistics/delivery-engine.service";
 import { ROUTES } from "@/lib/constants/routes";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { removeFromCartAction } from "@/app/(buyer)/actions";
-import { CheckoutButton } from "./checkout-button";
+import { CartCheckoutPanel, type SellerGroup } from "@/components/buyer/CartCheckoutPanel";
 
 export default async function CartPage() {
   const user = await currentUser();
   if (!user) redirect(ROUTES.login);
 
-  const items = await listCartItems(user.id);
-  const total = items.reduce((sum, item) => sum + Number(item.product.discountPrice ?? item.product.price) * item.quantity, 0);
+  const [items, addresses, buyerUser] = await Promise.all([
+    listCartItems(user.id),
+    listAddresses(user.id),
+    db.user.findUniqueOrThrow({ where: { id: user.id }, select: { latitude: true, longitude: true } }),
+  ]);
+  const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
+  const buyerCoords = resolveBuyerCoordinates(defaultAddress, buyerUser);
+
+  const sellerIds = [...new Set(items.map((item) => item.product.sellerId))];
+  const sellerGroups: SellerGroup[] = await Promise.all(
+    sellerIds.map(async (sellerId) => {
+      const sellerItems = items.filter((item) => item.product.sellerId === sellerId);
+      const seller = sellerItems[0].product.seller;
+      const subtotal = sellerItems.reduce(
+        (sum, item) => sum + Number(item.product.discountPrice ?? item.product.price) * item.quantity,
+        0,
+      );
+
+      let quote: SellerGroup["quote"] = null;
+      let quoteError: string | null = null;
+      if (defaultAddress) {
+        try {
+          quote = await calculateDeliveryQuote({
+            sellerCoords: seller.latitude != null && seller.longitude != null ? { latitude: seller.latitude, longitude: seller.longitude } : null,
+            buyerCoords,
+            sellerCity: seller.city,
+            buyerCity: defaultAddress.city,
+          });
+        } catch (error) {
+          quoteError = error instanceof Error ? error.message : "Delivery pricing is unavailable for this seller right now";
+        }
+      }
+
+      return {
+        sellerId,
+        sellerName: seller.storeName ?? seller.businessName,
+        itemTitles: sellerItems.map((item) => item.product.title),
+        subtotal,
+        offersPickup: seller.offersPickup,
+        quote,
+        quoteError,
+      };
+    }),
+  );
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
@@ -57,15 +102,6 @@ export default async function CartPage() {
             ))}
           </div>
 
-          <Card>
-            <CardContent className="flex items-center justify-between p-4">
-              <p className="font-medium text-secondary-foreground">Total</p>
-              <p className="text-lg font-semibold text-accent">
-                {new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN" }).format(total)}
-              </p>
-            </CardContent>
-          </Card>
-
           <Card className="border-accent/30 bg-accent/5">
             <CardContent className="flex flex-col gap-1.5 p-4 text-sm">
               <p className="flex items-center gap-2 font-medium text-foreground">
@@ -79,13 +115,10 @@ export default async function CartPage() {
             </CardContent>
           </Card>
 
-          {/* Sticky on mobile (sits just above MobileBottomNav) so "Place order" is always reachable without scrolling past every cart item; back to normal in-flow placement from sm: up. */}
-          <div className="fixed inset-x-0 bottom-16 z-30 border-t border-border bg-background/95 p-3 backdrop-blur-md sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
-            <div className="mx-auto max-w-2xl">
-              <CheckoutButton />
-            </div>
-          </div>
-          <div className="h-20 sm:hidden" aria-hidden />
+          <CartCheckoutPanel
+            addresses={addresses.map((a) => ({ id: a.id, label: a.label, line1: a.line1, city: a.city, state: a.state, isDefault: a.isDefault }))}
+            sellerGroups={sellerGroups}
+          />
         </>
       )}
     </div>

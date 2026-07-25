@@ -29,6 +29,7 @@ export default async function OnboardingStorePage() {
         defaultMarketLocation={profile.marketLocation ?? ""}
         defaultCity={profile.city ?? ""}
         defaultState={profile.state ?? ""}
+        defaultArea={profile.area ?? ""}
         defaultCategoryTags={profile.categoryTags}
         defaultLogoUrl={profile.logoUrl ?? undefined}
         defaultBannerUrl={profile.bannerUrl ?? undefined}

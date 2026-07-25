@@ -35,6 +35,11 @@ export const storeSetupSchema = z.object({
   marketLocation: z.string().min(2, "Tell buyers where your store/stall is").max(120),
   city: z.string().min(1, "City is required").max(60),
   state: z.string().min(1, "State is required").max(60),
+  area: z.string().max(80).optional().or(z.literal("")),
+  /// Populated by a "Pin your shop location" tap via the browser
+  /// Geolocation API — never sent otherwise.
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
   categoryTags: z
     .array(z.enum(SELLER_PRODUCT_TYPES))
     .min(1, "Select at least one product type"),

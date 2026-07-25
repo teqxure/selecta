@@ -16,10 +16,17 @@ export interface ProductCardProps {
   sellerName: string;
   sellerRating?: number;
   city?: string | null;
+  /** Real haversine distance from the buyer, when both sides have coordinates — see services/logistics/delivery-engine.service.ts. */
+  distanceKm?: number | null;
   likeCount: number;
   isSaved?: boolean;
   canSave?: boolean;
   isSponsored?: boolean;
+}
+
+function formatDistance(distanceKm: number): string {
+  if (distanceKm < 1) return `${Math.round(distanceKm * 1000)}m away`;
+  return `${distanceKm.toFixed(1)}km away`;
 }
 
 /** Fashion-content tile: large image, save button, condition badge, price, location, seller rating. */
@@ -34,6 +41,7 @@ export function ProductCard({
   sellerName,
   sellerRating,
   city,
+  distanceKm,
   likeCount,
   isSaved = false,
   canSave = true,
@@ -98,10 +106,11 @@ export function ProductCard({
               </span>
             )}
           </span>
-          {city && (
+          {(distanceKm != null || city) && (
             <span className="flex shrink-0 items-center gap-0.5">
               <MapPin className="h-3 w-3" strokeWidth={2} />
-              {city}
+              {distanceKm != null ? formatDistance(distanceKm) : city}
+              {distanceKm != null && city ? ` · ${city}` : ""}
             </span>
           )}
         </div>

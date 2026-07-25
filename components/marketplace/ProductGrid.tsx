@@ -10,6 +10,8 @@ export interface GridProduct {
   currency: string;
   conditionGrade: string;
   city: string | null;
+  /** Real haversine distance from the buyer, when both sides have coordinates. */
+  distanceKm?: number;
   likeCount: number;
   images: { url: string }[];
   seller: { storeName: string | null; businessName: string; ratingAverage: number } | null;
@@ -50,6 +52,7 @@ export function ProductGrid({
           sellerName={product.seller?.storeName ?? product.seller?.businessName ?? "Selecta seller"}
           sellerRating={product.seller?.ratingAverage}
           city={product.city}
+          distanceKm={product.distanceKm}
           likeCount={product.likeCount}
           isSaved={savedIds?.has(product.id) ?? false}
           canSave={canSave}

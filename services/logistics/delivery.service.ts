@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors";
-import type { DeliveryMethod, DeliveryStatus, OrderStatus } from "@/generated/prisma/enums";
+import type { DeliveryMethod, DeliveryStatus, OrderStatus, DeliveryFulfillmentType } from "@/generated/prisma/enums";
+import type { DeliveryQuote } from "@/services/logistics/delivery-engine.service";
 
 /** An order's OrderStatus drives the buyer/seller-facing lifecycle; DeliveryStatus is the narrower logistics sub-track riding alongside it. */
 const ORDER_STATUS_TO_DELIVERY_STATUS: Partial<Record<OrderStatus, DeliveryStatus>> = {
@@ -77,4 +78,32 @@ export async function setDeliveryDetails(orderId: string, sellerUserId: string, 
 
 export function getDeliveryForOrder(orderId: string) {
   return db.delivery.findUnique({ where: { orderId }, include: { events: { orderBy: { createdAt: "asc" } }, agent: true } });
+}
+
+/**
+ * Persists the *final chosen* delivery-engine quote at checkout time —
+ * only called for single-seller orders (the common case). `Delivery` stays
+ * 1:1 with `Order`, so a genuine multi-seller order with per-seller quotes
+ * can't have all of them represented here yet; this is the documented seam
+ * where `Delivery` would need to become 1:many (keyed by seller) for true
+ * split delivery — a deliberate future-work boundary, not an oversight.
+ */
+export async function setDeliveryQuote(
+  orderId: string,
+  quote: DeliveryQuote,
+  fulfillmentType: DeliveryFulfillmentType,
+  finalFee: number,
+) {
+  const delivery = await ensureDelivery(orderId);
+  return db.delivery.update({
+    where: { id: delivery.id },
+    data: {
+      distanceKm: quote.distanceKm,
+      zoneLabel: quote.zoneLabel,
+      estimatedMinutes: quote.estimatedMinutes,
+      fulfillmentType,
+      deliveryFee: finalFee,
+      method: fulfillmentType === "PICKUP" ? "MANUAL" : delivery.method,
+    },
+  });
 }

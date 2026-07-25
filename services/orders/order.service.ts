@@ -15,7 +15,19 @@ interface OrderLineInput {
   offerId?: string;
 }
 
-export async function createOrder(buyerId: string, lines: OrderLineInput[], shippingAddress: Address) {
+/**
+ * `deliveryFee` is computed server-side by the caller via
+ * `calculateDeliveryQuote` (never trusted from a client) and defaults to 0
+ * for call sites that don't yet route through the delivery engine (e.g.
+ * the accepted-offer checkout flow in app/(buyer)/messages/actions.ts —
+ * a known gap, not an oversight).
+ */
+export async function createOrder(
+  buyerId: string,
+  lines: OrderLineInput[],
+  shippingAddress: Address,
+  deliveryFee = 0,
+) {
   if (lines.length === 0) throw new ValidationError("An order must contain at least one item");
 
   const order = await db.$transaction(async (tx) => {
@@ -42,7 +54,7 @@ export async function createOrder(buyerId: string, lines: OrderLineInput[], ship
       return offer.amount;
     };
 
-    const totalAmount = lines.reduce((sum, line) => {
+    const itemsSubtotal = lines.reduce((sum, line) => {
       const product = products.find((p) => p.id === line.productId)!;
       return sum + Number(unitPriceFor(line, product)) * line.quantity;
     }, 0);
@@ -50,7 +62,8 @@ export async function createOrder(buyerId: string, lines: OrderLineInput[], ship
     const created = await tx.order.create({
       data: {
         buyerId,
-        totalAmount,
+        totalAmount: itemsSubtotal + deliveryFee,
+        deliveryFee,
         shippingAddress: shippingAddress as object,
         items: {
           create: lines.map((line) => {

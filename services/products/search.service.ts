@@ -4,6 +4,7 @@ import { NotFoundError } from "@/lib/errors";
 import { createNotification } from "@/services/notifications/notification.service";
 import { getActiveBoostProductIds } from "@/services/monetization/boost.service";
 import { getFeaturedStoreSellerIds } from "@/services/monetization/entitlement.service";
+import { haversineDistanceKm, boundingBox, type Coordinates } from "@/services/logistics/delivery-engine.service";
 import { PAGINATION } from "@/lib/constants/app";
 import type { SearchFilters } from "@/lib/validators/product";
 import type { PaginatedResult } from "@/types";
@@ -97,14 +98,55 @@ export async function listTrending(limit = 12) {
   return attachSponsoredFlag(items);
 }
 
-export async function listNearby(city: string, limit = 12) {
+/** Candidate pool size for the bounding-box pre-filter, before precise haversine ranking — same bounded-window philosophy as `searchProducts`. */
+const NEARBY_CANDIDATE_WINDOW = 300;
+/** "Near you" without a specific radius means "within the city" — a generous default so it still returns results in a sparse catalog. */
+const DEFAULT_NEARBY_RADIUS_KM = 15;
+
+/**
+ * Real distance-ranked results when the buyer has coordinates; falls back
+ * to today's city-string match otherwise (expected during rollout, before
+ * most rows have coordinates — never crashes, never fabricates a distance).
+ */
+export async function listNearby(options: { city?: string | null; buyerCoords?: Coordinates | null }, limit = 12) {
+  if (options.buyerCoords) {
+    return listNearbyByRadius(options.buyerCoords, DEFAULT_NEARBY_RADIUS_KM, limit);
+  }
+  if (!options.city) return [];
+
   const items = await db.product.findMany({
-    where: { status: "ACTIVE", city: { equals: city, mode: "insensitive" }, ...notSuspendedSeller },
+    where: { status: "ACTIVE", city: { equals: options.city, mode: "insensitive" }, ...notSuspendedSeller },
     include: cardInclude,
     orderBy: { createdAt: "desc" },
     take: limit,
   });
   return attachSponsoredFlag(items);
+}
+
+/** Powers the "Within 2km / 5km / 10km" homepage tiers — real haversine distance, nearest first. */
+export async function listNearbyByRadius(buyerCoords: Coordinates, radiusKm: number, limit = 12) {
+  const box = boundingBox(buyerCoords, radiusKm);
+  const candidates = await db.product.findMany({
+    where: {
+      status: "ACTIVE",
+      ...notSuspendedSeller,
+      latitude: { gte: box.minLat, lte: box.maxLat },
+      longitude: { gte: box.minLng, lte: box.maxLng },
+    },
+    include: cardInclude,
+    take: NEARBY_CANDIDATE_WINDOW,
+  });
+
+  const withDistance = candidates
+    .map((product) => ({
+      ...product,
+      distanceKm: haversineDistanceKm(buyerCoords, { latitude: product.latitude!, longitude: product.longitude! }),
+    }))
+    .filter((product) => product.distanceKm <= radiusKm)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, limit);
+
+  return attachSponsoredFlag(withDistance);
 }
 
 /** Top categories by lifetime view volume among active listings — no hardcoded list, purely derived. */

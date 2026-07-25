@@ -8,10 +8,19 @@ export function listAddresses(userId: string) {
   return db.address.findMany({ where: { userId }, orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] });
 }
 
+/** Ownership-scoped lookup — a mismatched id is NotFoundError, never another user's address. */
+export async function getAddressById(userId: string, addressId: string) {
+  const address = await db.address.findFirst({ where: { id: addressId, userId } });
+  if (!address) throw new NotFoundError("Address");
+  return address;
+}
+
 export async function createAddress(userId: string, input: AddressInput) {
   if (input.isDefault) {
     await db.address.updateMany({ where: { userId }, data: { isDefault: false } });
   }
+
+  const hasCoords = input.latitude != null && input.longitude != null;
 
   return db.address.create({
     data: {
@@ -21,8 +30,14 @@ export async function createAddress(userId: string, input: AddressInput) {
       line2: sanitizeOptionalText(input.line2),
       city: sanitizeText(input.city),
       state: sanitizeText(input.state),
+      area: sanitizeOptionalText(input.area),
+      landmark: sanitizeOptionalText(input.landmark),
+      notes: sanitizeOptionalText(input.notes),
       phone: input.phone || undefined,
       isDefault: input.isDefault,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      locationUpdatedAt: hasCoords ? new Date() : undefined,
     },
   });
 }

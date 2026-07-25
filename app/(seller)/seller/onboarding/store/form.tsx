@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import Link from "next/link";
 import { submitStoreSetupAction } from "./actions";
 import type { OnboardingActionState } from "../personal/actions";
 import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { FormError } from "@/components/forms/FormError";
+import { UseMyLocationButton } from "@/components/forms/UseMyLocationButton";
 import { Card, CardContent } from "@/components/ui/Card";
 import { ImageUploadField } from "@/components/forms/ImageUploadField";
 import { SELLER_PRODUCT_TYPES, SELLER_PRODUCT_TYPE_LABELS } from "@/lib/validators/onboarding";
@@ -20,6 +21,7 @@ export function OnboardingStoreForm({
   defaultMarketLocation,
   defaultCity,
   defaultState,
+  defaultArea,
   defaultCategoryTags,
   defaultLogoUrl,
   defaultBannerUrl,
@@ -35,6 +37,7 @@ export function OnboardingStoreForm({
   defaultMarketLocation: string;
   defaultCity: string;
   defaultState: string;
+  defaultArea: string;
   defaultCategoryTags: string[];
   defaultLogoUrl?: string;
   defaultBannerUrl?: string;
@@ -47,6 +50,7 @@ export function OnboardingStoreForm({
   agreementAlreadyAccepted: boolean;
 }) {
   const [state, formAction] = useActionState(submitStoreSetupAction, initialState);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   return (
     <Card>
@@ -67,6 +71,14 @@ export function OnboardingStoreForm({
               <Input name="city" label="City" defaultValue={defaultCity} required />
               <Input name="state" label="State" defaultValue={defaultState} required />
             </div>
+            <Input name="area" label="Area/district" placeholder="Gwarinpa…" defaultValue={defaultArea} />
+            <UseMyLocationButton label="Pin your shop location" onLocated={({ lat, lng }) => setCoords({ lat, lng })} />
+            {coords && (
+              <>
+                <input type="hidden" name="latitude" value={coords.lat} />
+                <input type="hidden" name="longitude" value={coords.lng} />
+              </>
+            )}
 
             <fieldset className="flex flex-col gap-2">
               <legend className="text-sm font-medium text-foreground">What do you sell?</legend>

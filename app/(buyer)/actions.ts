@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth/rbac";
+import { db } from "@/lib/db";
 import { saveProduct, unsaveProduct } from "@/services/products/saved-product.service";
 import { addToCart, removeFromCart } from "@/services/products/cart.service";
 import { recordShare, recordContactSeller } from "@/services/products/search.service";
@@ -41,6 +42,26 @@ export async function recordProductShareAction(productId: string) {
 export async function recordContactSellerAction(productId: string) {
   const session = await requireAuth();
   await recordContactSeller(productId, session.userId);
+}
+
+/**
+ * The three outcomes of the location-permission prompt (Part One): "Allow
+ * location" persists real coordinates; "Not now"/"Manually select city"
+ * both just record DENIED so the prompt never nags again — coordinates are
+ * only ever written on this explicit tap, never a background watch.
+ */
+export async function grantLocationPermissionAction(latitude: number, longitude: number) {
+  const session = await requireAuth();
+  await db.user.update({
+    where: { id: session.userId },
+    data: { latitude, longitude, locationPermission: "GRANTED", locationUpdatedAt: new Date() },
+  });
+  revalidatePath(ROUTES.home);
+}
+
+export async function denyLocationPermissionAction() {
+  const session = await requireAuth();
+  await db.user.update({ where: { id: session.userId }, data: { locationPermission: "DENIED" } });
 }
 
 export async function toggleFollowStoreAction(sellerProfileId: string, currentlyFollowing: boolean) {

@@ -91,6 +91,8 @@ export async function completeStoreSetupStep(userId: string, sellerProfileId: st
   const storeSlug = await generateUniqueStoreSlug(storeName, sellerProfileId);
   const socialLinks = buildSocialLinks(input);
 
+  const hasCoords = input.latitude != null && input.longitude != null;
+
   const { count } = await db.sellerProfile.updateMany({
     where: { id: sellerProfileId, userId },
     data: {
@@ -99,6 +101,8 @@ export async function completeStoreSetupStep(userId: string, sellerProfileId: st
       marketLocation: sanitizeText(input.marketLocation),
       city: sanitizeText(input.city),
       state: sanitizeText(input.state),
+      area: sanitizeOptionalText(input.area),
+      ...(hasCoords && { latitude: input.latitude, longitude: input.longitude, locationUpdatedAt: new Date() }),
       categoryTags: input.categoryTags,
       ...(input.logoUrl && { logoUrl: input.logoUrl }),
       ...(input.bannerUrl && { bannerUrl: input.bannerUrl }),
@@ -203,6 +207,8 @@ export async function getSellerDashboardStats(sellerProfileId: string, userId: s
 }
 
 export async function updateStoreSettings(userId: string, sellerProfileId: string, input: UpdateSellerSettingsInput) {
+  const hasCoords = input.latitude != null && input.longitude != null;
+
   const { count } = await db.sellerProfile.updateMany({
     where: { id: sellerProfileId, userId },
     data: {
@@ -211,6 +217,8 @@ export async function updateStoreSettings(userId: string, sellerProfileId: strin
       marketLocation: sanitizeText(input.marketLocation),
       city: sanitizeText(input.city),
       state: sanitizeText(input.state),
+      area: sanitizeOptionalText(input.area),
+      ...(hasCoords && { latitude: input.latitude, longitude: input.longitude, locationUpdatedAt: new Date() }),
       ...(input.bannerUrl && { bannerUrl: input.bannerUrl }),
     },
   });

@@ -97,6 +97,11 @@ export function recordBoostRevenue(tx: DbOrTx, input: LedgerEntryInput) {
   return record(tx, "BOOST_REVENUE", input);
 }
 
+/** The delivery-fee portion of a buyer's payment — positive, 100% platform/logistics revenue, no seller split. */
+export function recordDeliveryFeeRevenue(tx: DbOrTx, input: LedgerEntryInput) {
+  return record(tx, "DELIVERY_FEE_REVENUE", input);
+}
+
 export function listLedgerEntriesForSeller(sellerId: string, take = 50) {
   return db.ledgerEntry.findMany({ where: { sellerId }, orderBy: { createdAt: "desc" }, take });
 }

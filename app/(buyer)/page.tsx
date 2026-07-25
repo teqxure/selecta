@@ -9,6 +9,7 @@ import {
   listUnderBudget,
   listTrending,
   listNearby,
+  listNearbyByRadius,
   getPopularCategories,
   getTopSellers,
   getRecommendedForYou,
@@ -32,6 +33,7 @@ const BUDGET_CEILING = 10_000;
 export default async function MarketplaceHomePage() {
   const user = await currentUser();
   const locationLabel = user?.city || "Nigeria";
+  const buyerCoords = user?.latitude != null && user?.longitude != null ? { latitude: user.latitude, longitude: user.longitude } : null;
 
   const [
     freshFinds,
@@ -39,6 +41,9 @@ export default async function MarketplaceHomePage() {
     underBudget,
     trending,
     nearby,
+    within2km,
+    within5km,
+    within10km,
     recommended,
     popularCategories,
     topSellers,
@@ -54,7 +59,10 @@ export default async function MarketplaceHomePage() {
     listPremiumFinds(8),
     listUnderBudget(BUDGET_CEILING, 8),
     listTrending(8),
-    user?.city ? listNearby(user.city, 8) : Promise.resolve([]),
+    user?.city || buyerCoords ? listNearby({ city: user?.city, buyerCoords }, 8) : Promise.resolve([]),
+    buyerCoords ? listNearbyByRadius(buyerCoords, 2, 8) : Promise.resolve([]),
+    buyerCoords ? listNearbyByRadius(buyerCoords, 5, 8) : Promise.resolve([]),
+    buyerCoords ? listNearbyByRadius(buyerCoords, 10, 8) : Promise.resolve([]),
     getRecommendedForYou(user?.id, 8),
     getPopularCategories(6),
     getTopSellers(8),
@@ -78,9 +86,17 @@ export default async function MarketplaceHomePage() {
     ]),
   );
 
-  const allIds = [...freshFinds.items, ...premiumFinds, ...underBudget, ...trending, ...nearby, ...recommended].map(
-    (p) => p.id,
-  );
+  const allIds = [
+    ...freshFinds.items,
+    ...premiumFinds,
+    ...underBudget,
+    ...trending,
+    ...nearby,
+    ...within2km,
+    ...within5km,
+    ...within10km,
+    ...recommended,
+  ].map((p) => p.id);
   const savedIds = user ? await getSavedProductIds(user.id, allIds) : undefined;
   // Real listing photos first, topped up with curated decorative stock so
   // the hero always has enough variety to cycle through even while the
@@ -163,10 +179,28 @@ export default async function MarketplaceHomePage() {
           <ProductGrid products={freshFinds.items} savedIds={savedIds} />
         </ProductSection>
 
+        {within2km.length > 0 && (
+          <ProductSection eyebrow="Nearby" title="Within 2 km" subtitle="You could pick this up in minutes" seeAllHref={ROUTES.search}>
+            <ProductGrid products={within2km} savedIds={savedIds} />
+          </ProductSection>
+        )}
+
+        {within5km.length > 0 && (
+          <ProductSection eyebrow="Nearby" title="Within 5 km" subtitle="A short trip away" seeAllHref={ROUTES.search}>
+            <ProductGrid products={within5km} savedIds={savedIds} />
+          </ProductSection>
+        )}
+
+        {within10km.length > 0 && (
+          <ProductSection eyebrow="Nearby" title="Within 10 km" subtitle="Still close by" seeAllHref={ROUTES.search}>
+            <ProductGrid products={within10km} savedIds={savedIds} />
+          </ProductSection>
+        )}
+
         {nearby.length > 0 && (
           <ProductSection
             eyebrow="Nearby"
-            title="Near You"
+            title={buyerCoords ? "Across Your City" : "Near You"}
             subtitle={`Sellers around ${locationLabel}`}
             seeAllHref={`${ROUTES.search}?city=${encodeURIComponent(locationLabel)}`}
           >

@@ -15,6 +15,9 @@ export const updateSellerSettingsSchema = z.object({
   marketLocation: z.string().min(2).max(120),
   city: z.string().min(1).max(60),
   state: z.string().min(1).max(60),
+  area: z.string().max(80).optional().or(z.literal("")),
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
   bannerUrl: z.url().optional().or(z.literal("")),
 });
 
@@ -24,8 +27,16 @@ export const addressSchema = z.object({
   line2: z.string().max(150).optional().or(z.literal("")),
   city: z.string().min(1, "City is required").max(60),
   state: z.string().min(1, "State is required").max(60),
+  /// Area/district — finer than city, coarser than a street address.
+  area: z.string().max(80).optional().or(z.literal("")),
+  landmark: z.string().max(120).optional().or(z.literal("")),
+  notes: z.string().max(300).optional().or(z.literal("")),
   phone: nigerianPhoneSchema.optional().or(z.literal("")),
   isDefault: z.preprocess((v) => v === "on" || v === true, z.boolean()).optional().default(false),
+  /// Populated by the browser Geolocation API via a hidden input on an
+  /// explicit "Use my current location" tap — never sent otherwise.
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
 });
 
 export type UpdateBuyerProfileInput = z.infer<typeof updateBuyerProfileSchema>;

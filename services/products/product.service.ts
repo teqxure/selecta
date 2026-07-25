@@ -49,6 +49,11 @@ export async function createDraftProduct(sellerProfileId: string, input: Product
       price: 0,
       city: seller.city,
       state: seller.state,
+      // Denormalized from the seller at draft-creation time, same as
+      // city/state above — not kept in sync if the seller updates their
+      // location afterward (matching that existing precedent).
+      latitude: seller.latitude,
+      longitude: seller.longitude,
       videoUrl: input.videoUrl || null,
       images: {
         create: input.images.map((image, index) => ({ url: image.url, kind: image.kind, position: index })),

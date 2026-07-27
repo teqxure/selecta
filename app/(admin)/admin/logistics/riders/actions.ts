@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/rbac";
-import { createRiderAccount, setRiderActive } from "@/services/logistics/rider.service";
+import { createRiderAccount, setRiderActive, approveRiderVerification, rejectRiderVerification } from "@/services/logistics/rider.service";
 import { ROUTES } from "@/lib/constants/routes";
 import { isAppError } from "@/lib/errors";
 
@@ -37,5 +37,22 @@ export async function setRiderActiveAction(formData: FormData) {
   const isActive = formData.get("isActive") === "true";
 
   await setRiderActive(session.id, riderProfileId, isActive);
+  revalidatePath(ROUTES.admin.logisticsRiders);
+}
+
+export async function approveRiderVerificationAction(formData: FormData) {
+  const session = await requirePermission("MANAGE_LOGISTICS");
+  const riderProfileId = String(formData.get("riderProfileId"));
+
+  await approveRiderVerification(riderProfileId, session.id);
+  revalidatePath(ROUTES.admin.logisticsRiders);
+}
+
+export async function rejectRiderVerificationAction(formData: FormData) {
+  const session = await requirePermission("MANAGE_LOGISTICS");
+  const riderProfileId = String(formData.get("riderProfileId"));
+  const notes = String(formData.get("notes") || "").trim() || undefined;
+
+  await rejectRiderVerification(riderProfileId, session.id, notes);
   revalidatePath(ROUTES.admin.logisticsRiders);
 }

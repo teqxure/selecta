@@ -23,6 +23,11 @@ export const ROUTES = {
     dashboard: "/rider",
     delivery: (id: string) => `/rider/deliveries/${id}`,
     wallet: "/rider/wallet",
+    onboarding: {
+      personal: "/rider/onboarding/personal",
+      vehicle: "/rider/onboarding/vehicle",
+      verification: "/rider/onboarding/verification",
+    },
   },
   seller: {
     root: "/seller",

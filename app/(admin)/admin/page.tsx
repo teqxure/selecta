@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, ShieldCheck, Wallet, Banknote, Gavel, Activity, Plug, Truck, Undo2, Ticket, FileCheck } from "lucide-react";
+import { Users, ShieldCheck, Wallet, Banknote, Gavel, Activity, Plug, Truck, Undo2, Ticket, FileCheck, Bike } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { db } from "@/lib/db";
@@ -89,9 +89,10 @@ export default async function AdminCommandCenterPage() {
         <StatCard label="Documents to review" icon={FileCheck} value={liveCounts.pendingDocuments.toLocaleString()} />
         <StatCard label="Return requests" icon={Undo2} value={liveCounts.pendingReturns.toLocaleString()} />
         <StatCard label="Open support tickets" icon={Ticket} value={liveCounts.openTickets.toLocaleString()} />
+        <StatCard label="Rider applications" icon={Bike} value={liveCounts.pendingRiderApplications.toLocaleString()} />
       </div>
 
-      {(pendingVerifications > 0 || finance.pendingWithdrawals.count > 0 || openDisputes > 0 || liveCounts.unassignedDeliveries > 0 || liveCounts.pendingDocuments > 0 || liveCounts.pendingReturns > 0 || liveCounts.openTickets > 0) && (
+      {(pendingVerifications > 0 || finance.pendingWithdrawals.count > 0 || openDisputes > 0 || liveCounts.unassignedDeliveries > 0 || liveCounts.pendingDocuments > 0 || liveCounts.pendingReturns > 0 || liveCounts.openTickets > 0 || liveCounts.pendingRiderApplications > 0) && (
         <Card className="border-accent/30 bg-accent/5">
           <CardHeader>
             <CardTitle>Pending admin tasks</CardTitle>
@@ -151,6 +152,14 @@ export default async function AdminCommandCenterPage() {
                 className="rounded-full border border-accent/30 bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
               >
                 {liveCounts.openTickets} support ticket{liveCounts.openTickets === 1 ? "" : "s"} open
+              </Link>
+            )}
+            {liveCounts.pendingRiderApplications > 0 && (
+              <Link
+                href={ROUTES.admin.logisticsRiders}
+                className="rounded-full border border-accent/30 bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {liveCounts.pendingRiderApplications} rider application{liveCounts.pendingRiderApplications === 1 ? "" : "s"} to review
               </Link>
             )}
           </CardContent>

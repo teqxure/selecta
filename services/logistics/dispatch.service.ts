@@ -28,6 +28,7 @@ export function listAssignedDeliveries() {
 export async function assignRiderToDelivery(adminId: string, deliveryId: string, riderUserId: string) {
   const rider = await db.riderProfile.findUnique({ where: { userId: riderUserId } });
   if (!rider || !rider.isActive) throw new ValidationError("This rider isn't available for assignment");
+  if (rider.verificationStatus !== "VERIFIED") throw new ValidationError("This rider hasn't completed verification yet");
 
   return db.$transaction(async (tx) => {
     const delivery = await tx.delivery.findUnique({ where: { id: deliveryId } });

@@ -48,6 +48,15 @@ export async function createUser(input: RegisterInput) {
       });
     }
 
+    if (role === Role.RIDER) {
+      // Mirrors the SellerProfile bootstrap above — every self-registered
+      // rider starts a RiderProfile at registration (defaulting to
+      // PENDING verification) so the onboarding wizard always has a row to
+      // update. Admin-created riders (createRiderAccount) skip this path
+      // entirely and are created already-VERIFIED.
+      await tx.riderProfile.create({ data: { userId: created.id, onboardingStep: 1 } });
+    }
+
     await tx.userActivity.create({
       data: { userId: created.id, action: "ACCOUNT_CREATED", metadata: { role } },
     });

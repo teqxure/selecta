@@ -41,7 +41,9 @@ export async function registerAction(_prevState: AuthActionState, formData: Form
     throw error;
   }
 
-  redirect(role === Role.SELLER ? ROUTES.seller.onboarding.personal : ROLE_HOME_ROUTE[role]);
+  if (role === Role.SELLER) redirect(ROUTES.seller.onboarding.personal);
+  if (role === Role.RIDER) redirect(ROUTES.rider.onboarding.personal);
+  redirect(ROLE_HOME_ROUTE[role]);
 }
 
 export async function loginAction(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {

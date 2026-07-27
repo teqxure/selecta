@@ -66,3 +66,31 @@ export const verificationSubmissionSchema = z.object({
 export type PersonalInfoInput = z.infer<typeof personalInfoSchema>;
 export type StoreSetupInput = z.infer<typeof storeSetupSchema>;
 export type VerificationSubmissionInput = z.infer<typeof verificationSubmissionSchema>;
+
+export const RIDER_VEHICLE_TYPES = ["BICYCLE", "MOTORBIKE", "CAR", "VAN"] as const;
+
+export const RIDER_VEHICLE_TYPE_LABELS: Record<(typeof RIDER_VEHICLE_TYPES)[number], string> = {
+  BICYCLE: "Bicycle",
+  MOTORBIKE: "Motorbike",
+  CAR: "Car",
+  VAN: "Van",
+};
+
+/** Motorised vehicles require a driving license document at the verification step; a bicycle doesn't. */
+export const RIDER_VEHICLE_TYPES_REQUIRING_LICENSE = new Set<(typeof RIDER_VEHICLE_TYPES)[number]>(["MOTORBIKE", "CAR", "VAN"]);
+
+/** Rider onboarding step 2 — vehicle info. */
+export const riderVehicleSchema = z.object({
+  vehicleType: z.enum(RIDER_VEHICLE_TYPES),
+  vehiclePlateNumber: z.string().max(20).optional().or(z.literal("")),
+});
+
+/** Rider onboarding step 3 — verification documents (URLs from a prior presigned upload). licenseDocumentUrl is required only for motorised vehicles, checked server-side against the rider's own vehicleType. */
+export const riderVerificationSubmissionSchema = z.object({
+  idDocumentUrl: z.url("Upload an identity document first"),
+  licenseDocumentUrl: z.url().optional().or(z.literal("")),
+  vehiclePhotoUrl: z.url("Upload a photo of your vehicle first"),
+});
+
+export type RiderVehicleInput = z.infer<typeof riderVehicleSchema>;
+export type RiderVerificationSubmissionInput = z.infer<typeof riderVerificationSubmissionSchema>;

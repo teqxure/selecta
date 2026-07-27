@@ -18,6 +18,7 @@ const initialState: AuthActionState = {};
 const ROLE_COPY: Record<(typeof PUBLIC_REGISTER_ROLES)[number], { label: string; description: string }> = {
   BUYER: { label: "I'm shopping", description: "Discover fashion from verified sellers" },
   SELLER: { label: "I'm selling", description: "Bring your store online" },
+  RIDER: { label: "I'm a rider", description: "Deliver orders and earn on your own schedule" },
 };
 
 interface RegisterFormProps {
@@ -36,7 +37,7 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Account type">
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Account type">
             {PUBLIC_REGISTER_ROLES.map((option) => (
               <label
                 key={option}
@@ -59,7 +60,7 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
             ))}
           </div>
 
-          {googleEnabled && (
+          {googleEnabled && role !== "RIDER" && (
             <>
               <GoogleAuthButton role={role} />
               <AuthDivider />
@@ -76,7 +77,7 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
           <PasswordInput name="confirmPassword" label="Confirm password" required />
           <FormError message={state.error} />
           <SubmitButton className="w-full">
-            {role === "SELLER" ? "Create seller account" : "Create account"}
+            {role === "SELLER" ? "Create seller account" : role === "RIDER" ? "Create rider account" : "Create account"}
           </SubmitButton>
         </form>
         <p className="mt-4 text-center text-sm text-muted-foreground">

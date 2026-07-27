@@ -34,6 +34,15 @@ enum SellerVerificationStatus {
   SUSPENDED
 }
 
+/// Mirrors SellerVerificationStatus exactly — riders go through the same
+/// PENDING -> VERIFIED|REJECTED review lifecycle as sellers.
+enum RiderVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
 enum UserStatus {
   ACTIVE
   INACTIVE
@@ -1357,25 +1366,58 @@ model DeliveryHoliday {
 /// to that FK was needed. Earnings reuse the existing role-agnostic
 /// `Wallet` model (already keyed by `userId`, not by seller).
 model RiderProfile {
-  id                 String      @id @default(cuid())
-  userId             String      @unique @map("user_id")
-  vehicleType        String?     @map("vehicle_type")
-  vehiclePlateNumber String?     @map("vehicle_plate_number")
-  status             RiderStatus @default(OFFLINE)
-  latitude           Float?
-  longitude          Float?
-  locationUpdatedAt  DateTime?   @map("location_updated_at")
-  ratingAverage      Float       @default(0) @map("rating_average")
-  ratingCount        Int         @default(0) @map("rating_count")
-  totalDeliveries    Int         @default(0) @map("total_deliveries")
-  isActive           Boolean     @default(true) @map("is_active")
-  createdAt          DateTime    @default(now()) @map("created_at")
-  updatedAt          DateTime    @updatedAt @map("updated_at")
+  id                    String                  @id @default(cuid())
+  userId                String                  @unique @map("user_id")
+  vehicleType           String?                 @map("vehicle_type")
+  vehiclePlateNumber    String?                 @map("vehicle_plate_number")
+  status                RiderStatus             @default(OFFLINE)
+  latitude              Float?
+  longitude             Float?
+  locationUpdatedAt     DateTime?               @map("location_updated_at")
+  ratingAverage         Float                   @default(0) @map("rating_average")
+  ratingCount           Int                     @default(0) @map("rating_count")
+  totalDeliveries       Int                     @default(0) @map("total_deliveries")
+  isActive              Boolean                 @default(true) @map("is_active")
+  /// Self-signup onboarding progress — mirrors SellerProfile.onboardingStep
+  /// (1 = registered, 2 = personal confirmed, 3 = vehicle info submitted,
+  /// 4 = verification submitted/completed). Admin-created riders
+  /// (createRiderAccount) skip straight to step 4, already completed.
+  onboardingStep        Int                     @default(1) @map("onboarding_step")
+  onboardingCompletedAt DateTime?               @map("onboarding_completed_at")
+  /// Dispatch eligibility gate — only VERIFIED riders can go AVAILABLE or
+  /// be assigned a delivery, regardless of `isActive`. Admin-created riders
+  /// default to VERIFIED (the admin already vetted them out-of-band);
+  /// self-signups default to PENDING and go through RiderVerification.
+  verificationStatus    RiderVerificationStatus @default(PENDING) @map("verification_status")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verification RiderVerification?
 
   @@index([status])
   @@map("rider_profiles")
+}
+
+/// Mirrors SellerVerification exactly, one document set fixed at three
+/// fields — a rider's ID, driving license (only required for
+/// motorised vehicles), and a photo of the vehicle itself.
+model RiderVerification {
+  id                 String                  @id @default(cuid())
+  riderProfileId     String                  @unique @map("rider_profile_id")
+  idDocumentUrl      String?                 @map("id_document_url")
+  licenseDocumentUrl String?                 @map("license_document_url")
+  vehiclePhotoUrl    String?                 @map("vehicle_photo_url")
+  status             RiderVerificationStatus @default(PENDING)
+  reviewedById       String?                 @map("reviewed_by_id")
+  reviewNotes        String?                 @map("review_notes")
+  submittedAt        DateTime                @default(now()) @map("submitted_at")
+  reviewedAt         DateTime?               @map("reviewed_at")
+
+  riderProfile RiderProfile @relation(fields: [riderProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("rider_verifications")
 }
 
 // ---------------------------------------------------------------------------

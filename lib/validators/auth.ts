@@ -4,8 +4,8 @@ import { emailSchema, nigerianPhoneSchema, passwordSchema } from "@/lib/validato
 /** Checkbox inputs arrive as "on" or are absent from FormData — never "true"/"false". */
 const checkboxSchema = z.preprocess((value) => value === "on" || value === true, z.boolean());
 
-/** Public self-registration only ever creates a BUYER or SELLER account. */
-export const PUBLIC_REGISTER_ROLES = ["BUYER", "SELLER"] as const;
+/** Public self-registration creates a BUYER, SELLER, or RIDER account (admins remain admin-created only). */
+export const PUBLIC_REGISTER_ROLES = ["BUYER", "SELLER", "RIDER"] as const;
 
 export const registerSchema = z
   .object({

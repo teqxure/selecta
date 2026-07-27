@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { RiderVerificationStatusBanner } from "@/components/rider/RiderVerificationStatusBanner";
 import { Bike } from "lucide-react";
 import { setRiderAvailabilityAction } from "./actions";
 
@@ -24,6 +25,8 @@ export default async function RiderDashboardPage() {
     getRiderActiveDeliveries(session.userId),
   ]);
 
+  const isVerified = profile.verificationStatus === "VERIFIED";
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -31,8 +34,16 @@ export default async function RiderDashboardPage() {
           <h1 className="font-display text-2xl font-semibold text-foreground">Your deliveries</h1>
           <p className="text-sm text-muted-foreground">Active deliveries assigned to you.</p>
         </div>
-        {profile && <Badge tone={STATUS_TONE[profile.status]}>{profile.status.replaceAll("_", " ")}</Badge>}
+        <Badge tone={STATUS_TONE[profile.status]}>{profile.status.replaceAll("_", " ")}</Badge>
       </div>
+
+      {!isVerified && (
+        <RiderVerificationStatusBanner
+          verificationStatus={profile.verificationStatus}
+          hasSubmission={Boolean(profile.verification)}
+          reviewNotes={profile.verification?.reviewNotes}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -45,14 +56,14 @@ export default async function RiderDashboardPage() {
               <Button
                 type="submit"
                 size="sm"
-                variant={profile?.status === status ? "accent" : "outline"}
-                disabled={profile?.status === "ON_DELIVERY"}
+                variant={profile.status === status ? "accent" : "outline"}
+                disabled={profile.status === "ON_DELIVERY" || !isVerified}
               >
                 {status.replaceAll("_", " ")}
               </Button>
             </form>
           ))}
-          {profile?.status === "ON_DELIVERY" && (
+          {profile.status === "ON_DELIVERY" && (
             <p className="self-center text-xs text-muted-foreground">Finish your active delivery before changing availability.</p>
           )}
         </CardContent>

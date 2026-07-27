@@ -6,16 +6,18 @@ const ACTIVE_DELIVERY_STATUSES = ["PENDING", "PREPARING", "READY_FOR_PICKUP", "R
 
 /** Plain live counts across every new center this phase added — the Executive Center's cross-cutting "what needs attention" row. */
 export async function getLiveOperationalCounts() {
-  const [liveOrders, activeDeliveries, unassignedDeliveries, pendingDocuments, pendingReturns, openTickets] = await Promise.all([
-    db.order.count({ where: { status: { in: [...LIVE_ORDER_STATUSES] } } }),
-    db.delivery.count({ where: { status: { in: [...ACTIVE_DELIVERY_STATUSES] } } }),
-    db.delivery.count({ where: { agentId: null, method: "MANUAL", status: { notIn: ["DELIVERED", "COMPLETED", "FAILED"] } } }),
-    db.sellerDocument.count({ where: { status: "PENDING" } }),
-    db.returnRequest.count({ where: { status: "REQUESTED" } }),
-    db.supportTicket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
-  ]);
+  const [liveOrders, activeDeliveries, unassignedDeliveries, pendingDocuments, pendingReturns, openTickets, pendingRiderApplications] =
+    await Promise.all([
+      db.order.count({ where: { status: { in: [...LIVE_ORDER_STATUSES] } } }),
+      db.delivery.count({ where: { status: { in: [...ACTIVE_DELIVERY_STATUSES] } } }),
+      db.delivery.count({ where: { agentId: null, method: "MANUAL", status: { notIn: ["DELIVERED", "COMPLETED", "FAILED"] } } }),
+      db.sellerDocument.count({ where: { status: "PENDING" } }),
+      db.returnRequest.count({ where: { status: "REQUESTED" } }),
+      db.supportTicket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
+      db.riderVerification.count({ where: { status: "PENDING" } }),
+    ]);
 
-  return { liveOrders, activeDeliveries, unassignedDeliveries, pendingDocuments, pendingReturns, openTickets };
+  return { liveOrders, activeDeliveries, unassignedDeliveries, pendingDocuments, pendingReturns, openTickets, pendingRiderApplications };
 }
 
 export interface ActivityFeedEntry {

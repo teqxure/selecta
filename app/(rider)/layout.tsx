@@ -33,7 +33,7 @@ export default async function RiderLayout({ children }: { children: ReactNode })
   // submitted. Mirrors the same branch in app/(seller)/layout.tsx.
   if (user?.role === Role.RIDER && !profile?.onboardingCompletedAt) {
     return (
-      <div className="flex min-h-full flex-1 flex-col">
+      <div className="theme-light flex min-h-full flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <Logo href={env.NEXT_PUBLIC_APP_URL} />
           <form action={logoutAction}>
@@ -52,7 +52,7 @@ export default async function RiderLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col md:flex-row">
+    <div className="theme-light flex min-h-full flex-1 flex-col md:flex-row">
       {user && user.role === Role.RIDER && (
         <DashboardSidebar
           subtitle="Rider"

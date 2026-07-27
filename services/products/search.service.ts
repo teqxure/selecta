@@ -173,29 +173,6 @@ export async function getPopularCategories(limit = 6) {
     .filter((c): c is NonNullable<typeof c> => c !== null);
 }
 
-/**
- * One representative real listing photo for a free-text "vibe" query (e.g.
- * "church", "street") — same title/brand/description matching as search,
- * just narrowed to the newest active match. Returns null when nothing
- * matches yet so the caller can fall back to curated stock imagery.
- */
-export async function getCollectionPreviewImage(query: string): Promise<string | null> {
-  const product = await db.product.findFirst({
-    where: {
-      status: "ACTIVE",
-      ...notSuspendedSeller,
-      OR: [
-        { title: { contains: query, mode: "insensitive" } },
-        { brand: { contains: query, mode: "insensitive" } },
-        { description: { contains: query, mode: "insensitive" } },
-      ],
-    },
-    orderBy: { createdAt: "desc" },
-    select: { images: { orderBy: { position: "asc" }, take: 1, select: { url: true } } },
-  });
-  return product?.images[0]?.url ?? null;
-}
-
 /** Verified sellers ranked by completed sales and rating — real store-performance ranking, not a curated list. */
 export async function getTopSellers(limit = 8) {
   const sellers = await db.sellerProfile.findMany({

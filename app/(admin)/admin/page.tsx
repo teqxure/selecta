@@ -10,6 +10,7 @@ import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 import { ROUTES } from "@/lib/constants/routes";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { FeaturedStatCard } from "@/components/dashboard/FeaturedStatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
@@ -73,19 +74,37 @@ export default async function AdminCommandCenterPage() {
         description="A live snapshot across every center — jump into whatever needs attention."
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Total users" icon={Users} value={totalUsers.toLocaleString()} />
-        <StatCard label="Active sellers" icon={ShieldCheck} value={activeSellers.toLocaleString()} />
-        <StatCard label="Gross merchandise value" icon={Wallet} value={format(finance.gmv)} />
-        <StatCard label="Pending withdrawals" icon={Banknote} value={String(finance.pendingWithdrawals.count)} />
-        <StatCard label="Open disputes" icon={Gavel} value={String(openDisputes)} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <FeaturedStatCard
+          className="sm:col-span-2"
+          label="Gross merchandise value"
+          icon={Wallet}
+          value={format(finance.gmv)}
+          description={`${activeSellers.toLocaleString()} active sellers · ${totalUsers.toLocaleString()} total users`}
+          tone="midnight"
+        />
         <StatCard label="System status" icon={Activity} value={marketplaceStatus} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Live orders" icon={Activity} value={liveCounts.liveOrders.toLocaleString()} />
-        <StatCard label="Active deliveries" icon={Truck} value={liveCounts.activeDeliveries.toLocaleString()} />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard label="Total users" icon={Users} value={totalUsers.toLocaleString()} />
+        <StatCard label="Active sellers" icon={ShieldCheck} value={activeSellers.toLocaleString()} />
+        <StatCard label="Pending withdrawals" icon={Banknote} value={String(finance.pendingWithdrawals.count)} />
+        <StatCard label="Open disputes" icon={Gavel} value={String(openDisputes)} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <FeaturedStatCard
+          className="sm:col-span-2"
+          label="Live orders"
+          icon={Activity}
+          value={liveCounts.liveOrders.toLocaleString()}
+          description={`${liveCounts.activeDeliveries.toLocaleString()} deliveries in progress`}
+          tone="olive"
+        />
         <StatCard label="Unassigned deliveries" icon={Truck} value={liveCounts.unassignedDeliveries.toLocaleString()} />
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Documents to review" icon={FileCheck} value={liveCounts.pendingDocuments.toLocaleString()} />
         <StatCard label="Return requests" icon={Undo2} value={liveCounts.pendingReturns.toLocaleString()} />
         <StatCard label="Open support tickets" icon={Ticket} value={liveCounts.openTickets.toLocaleString()} />

@@ -5,6 +5,7 @@ import { getRiderProfileByUserId, getRiderActiveDeliveries, getRiderDashboardSta
 import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 import { ROUTES } from "@/lib/constants/routes";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { FeaturedStatCard } from "@/components/dashboard/FeaturedStatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -49,15 +50,24 @@ export default async function RiderDashboardPage() {
         />
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Earned today" icon={Wallet} value={format(stats.todayEarnings)} />
-        <StatCard label="Earned this week" icon={CalendarDays} value={format(stats.weekEarnings)} />
-        <StatCard label="Deliveries this week" icon={Package} value={String(stats.deliveriesThisWeek)} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <FeaturedStatCard
+          className="sm:col-span-2"
+          label="Earned this week"
+          icon={Wallet}
+          value={format(stats.weekEarnings)}
+          description={`${stats.deliveriesThisWeek} deliveries this week`}
+          tone="accent"
+        />
         <StatCard
           label="Rating"
           icon={Star}
           value={profile.ratingCount > 0 ? `${profile.ratingAverage.toFixed(1)} (${profile.ratingCount})` : "No ratings yet"}
         />
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <StatCard label="Earned today" icon={CalendarDays} value={format(stats.todayEarnings)} />
+        <StatCard label="Deliveries this week" icon={Package} value={String(stats.deliveriesThisWeek)} />
       </div>
 
       <Card>

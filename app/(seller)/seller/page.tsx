@@ -18,6 +18,7 @@ import { getUnreadCountForSeller } from "@/services/messaging/conversation.servi
 import { getSellerBalances } from "@/services/payments/payment.service";
 import { getStoreHealthScore, getSellerRecommendations } from "@/services/insights/seller-insight.service";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { FeaturedStatCard } from "@/components/dashboard/FeaturedStatCard";
 import { BarChart } from "@/components/dashboard/BarChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
@@ -207,10 +208,19 @@ export default async function SellerDashboardPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Today's revenue" icon={Wallet} value={format(todayRevenue)} />
-        <StatCard label="Wallet balance" icon={Banknote} value={format(balances.available)} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <FeaturedStatCard
+          className="sm:col-span-2"
+          label="Today's revenue"
+          icon={Wallet}
+          value={format(todayRevenue)}
+          description={`${format(balances.available)} available in wallet`}
+          tone="accent"
+        />
         <StatCard label="Total sales" icon={TrendingUp} value={String(profile.totalSales)} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Pending orders" icon={ShoppingCart} value={String(pendingOrders)} />
         <StatCard label="Active listings" icon={Package} value={String(statusCounts.active)} />
         <StatCard label="Profile views" icon={Eye} value={profile.profileViewCount.toLocaleString()} />

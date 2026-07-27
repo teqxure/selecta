@@ -167,7 +167,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   })).filter((group) => group.items.length > 0);
 
   return (
-    <div className="flex min-h-full flex-1 flex-col md:flex-row">
+    <div className="theme-light flex min-h-full flex-1 flex-col md:flex-row">
       <DashboardSidebar
         subtitle="Selecta HQ"
         groups={visibleGroups}

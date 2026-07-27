@@ -13,7 +13,6 @@ import {
   getPopularCategories,
   getTopSellers,
   getRecommendedForYou,
-  getCollectionPreviewImage,
 } from "@/services/products/search.service";
 import { getSavedProductIds } from "@/services/products/saved-product.service";
 import { Hero } from "@/components/marketplace/Hero";
@@ -26,7 +25,6 @@ import { SellCTABanner } from "@/components/marketplace/SellCTABanner";
 import { FAQAccordion } from "@/components/marketplace/FAQAccordion";
 import { ROUTES } from "@/lib/constants/routes";
 import { CURATED_HERO_IMAGES } from "@/lib/constants/hero-images";
-import { STYLE_COLLECTIONS } from "@/lib/constants/style-collections";
 
 const BUDGET_CEILING = 10_000;
 
@@ -53,7 +51,6 @@ export default async function MarketplaceHomePage() {
     citiesServed,
     completedOrderCount,
     averageSellerRating,
-    collectionPreviewImages,
   ] = await Promise.all([
     listActiveProducts(1, 8),
     listPremiumFinds(8),
@@ -76,15 +73,7 @@ export default async function MarketplaceHomePage() {
     db.sellerProfile
       .aggregate({ where: { verificationStatus: "VERIFIED" }, _avg: { ratingAverage: true } })
       .then((result) => result._avg.ratingAverage ?? 0),
-    Promise.all(STYLE_COLLECTIONS.map((collection) => getCollectionPreviewImage(collection.query))),
   ]);
-
-  const styleCollectionImages = Object.fromEntries(
-    STYLE_COLLECTIONS.map((collection, i) => [
-      collection.query,
-      collectionPreviewImages[i] ?? CURATED_HERO_IMAGES[i % CURATED_HERO_IMAGES.length],
-    ]),
-  );
 
   const allIds = [
     ...freshFinds.items,
@@ -129,7 +118,7 @@ export default async function MarketplaceHomePage() {
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 pt-10">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Style collections</p>
-        <StyleCollections images={styleCollectionImages} />
+        <StyleCollections />
       </div>
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 py-12">

@@ -85,6 +85,35 @@
   }
 }
 
+/*
+ * Forces the light palette for the admin/seller/rider dashboards
+ * regardless of OS dark-mode preference. Applied as a class on each
+ * dashboard route group's outermost wrapper — CSS custom properties
+ * re-declared on a descendant element win over the :root values set by
+ * the dark-mode media query above, for everything nested inside it. The
+ * public marketing site is untouched and still follows system preference.
+ */
+.theme-light {
+  --background: #faf8f4;
+  --foreground: var(--color-midnight);
+
+  --color-primary: var(--color-midnight);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #ffffff;
+  --color-secondary-foreground: var(--color-midnight);
+
+  --color-muted: var(--color-orange-tint);
+  --color-muted-foreground: #6b625b;
+  --color-border: #ddd6cc;
+
+  --shadow-card: 0 1px 2px rgba(11, 11, 14, 0.04), 0 8px 24px -12px rgba(11, 11, 14, 0.12);
+  --shadow-card-hover: 0 4px 8px rgba(11, 11, 14, 0.06), 0 16px 40px -12px rgba(11, 11, 14, 0.2);
+  --shadow-float: 0 20px 60px -20px rgba(11, 11, 14, 0.35);
+
+  background: var(--background);
+  color: var(--foreground);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

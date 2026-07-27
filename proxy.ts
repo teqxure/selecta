@@ -14,8 +14,8 @@ function matchPrefix(pathname: string, prefixes: readonly string[]) {
 /** Still served as-is even on the admin subdomain — the login/register forms, which aren't under `/admin`. (API routes and Next's own build assets never reach here — see `config.matcher` below.) */
 const ADMIN_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register"];
 
-/** Same idea, for the rider subdomain — the login/register forms aren't under `/rider` either. */
-const RIDER_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register"];
+/** Same idea, for the rider subdomain — the login/register forms aren't under `/rider` either, and `/become-a-rider` is the public landing page itself (rewritten to from "/" below, so it must not then also get "/rider" stuck on it). */
+const RIDER_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register", "/become-a-rider"];
 
 /** A request for an actual file — `/Selecta.png`, `/icon.png`, `/robots.txt` — never a page route, so it must never get an `/admin` prefix stuck on it. */
 const FILE_EXTENSION_PATTERN = /\.[a-zA-Z0-9]+$/;
@@ -46,7 +46,14 @@ function rewriteForAdminHost(request: NextRequest): string {
   return pathname === "/" ? "/admin" : `/admin${pathname}`;
 }
 
-/** Same idea as rewriteForAdminHost, fronting `/rider` instead of `/admin` on NEXT_PUBLIC_RIDER_HOST. */
+/**
+ * Same idea as rewriteForAdminHost, fronting `/rider` on
+ * NEXT_PUBLIC_RIDER_HOST — except the bare "/" maps to the public
+ * `/become-a-rider` marketing page instead of the (auth-gated) dashboard,
+ * since a logged-out visitor landing on this subdomain should see a real
+ * homepage, not get bounced straight to `/login`. `/become-a-rider`
+ * itself redirects an already-logged-in rider on to `/rider`.
+ */
 function rewriteForRiderHost(request: NextRequest): string {
   const pathname = request.nextUrl.pathname;
   if (!env.NEXT_PUBLIC_RIDER_HOST) return pathname;
@@ -54,11 +61,12 @@ function rewriteForRiderHost(request: NextRequest): string {
   const host = request.headers.get("host") ?? "";
   const isRiderHost = host === env.NEXT_PUBLIC_RIDER_HOST || host.startsWith(`${env.NEXT_PUBLIC_RIDER_HOST}:`);
   if (!isRiderHost) return pathname;
+  if (pathname === "/") return "/become-a-rider";
   if (pathname.startsWith("/rider")) return pathname;
   if (matchPrefix(pathname, RIDER_HOST_PASSTHROUGH_PREFIXES)) return pathname;
   if (FILE_EXTENSION_PATTERN.test(pathname)) return pathname;
 
-  return pathname === "/" ? "/rider" : `/rider${pathname}`;
+  return `/rider${pathname}`;
 }
 
 /**

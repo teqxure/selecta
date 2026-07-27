@@ -102,6 +102,11 @@ export function recordDeliveryFeeRevenue(tx: DbOrTx, input: LedgerEntryInput) {
   return record(tx, "DELIVERY_FEE_REVENUE", input);
 }
 
+/** A rider's cut of a delivery fee, credited on confirmed delivery — positive, from the rider's perspective this is their earnings. */
+export function recordRiderPayoutEarned(tx: DbOrTx, input: LedgerEntryInput) {
+  return record(tx, "RIDER_PAYOUT_EARNED", input);
+}
+
 /**
  * Seller-facing history only — excludes COMMISSION_EARNED at the query
  * level (not just at display) since sellers must never see the platform's
@@ -115,6 +120,11 @@ export function listLedgerEntriesForSeller(sellerId: string, take = 50) {
     orderBy: { createdAt: "desc" },
     take,
   });
+}
+
+/** Rider-facing history — riders have no platform-cut concern like sellers do, so no type is excluded. */
+export function listLedgerEntriesForRider(userId: string, take = 50) {
+  return db.ledgerEntry.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take });
 }
 
 /** What a seller has actually paid the platform for subscriptions/boosts — lifetime, summed from the ledger, never a mutable counter. */

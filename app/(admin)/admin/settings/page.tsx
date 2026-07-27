@@ -128,6 +128,20 @@ export default async function AdminSettingsPage() {
               </label>
             </div>
 
+            <div className="flex flex-col gap-4 rounded-xl border border-border p-4">
+              <p className="text-sm font-medium text-foreground">Logistics</p>
+              <Input
+                name="riderPayoutPercentage"
+                type="number"
+                min={0}
+                max={100}
+                label="Rider payout percentage"
+                helperText="Share of a delivery's fee credited to the assigned rider's wallet on confirmed delivery. The rest stays platform revenue."
+                defaultValue={settings.riderPayoutPercentage}
+                required
+              />
+            </div>
+
             <Button type="submit" variant="accent" className="self-start">
               Save settings
             </Button>

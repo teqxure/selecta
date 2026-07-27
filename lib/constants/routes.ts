@@ -23,7 +23,10 @@ export const ROUTES = {
     root: "/rider",
     dashboard: "/rider",
     delivery: (id: string) => `/rider/deliveries/${id}`,
+    history: "/rider/history",
     wallet: "/rider/wallet",
+    withdrawals: "/rider/withdrawals",
+    settings: "/rider/settings",
     onboarding: {
       personal: "/rider/onboarding/personal",
       vehicle: "/rider/onboarding/vehicle",
@@ -96,6 +99,7 @@ export const ROUTES = {
     logisticsHeatMap: "/admin/logistics/heat-map",
     logisticsDispatch: "/admin/logistics/dispatch",
     logisticsRiders: "/admin/logistics/riders",
+    logisticsRiderWithdrawals: "/admin/logistics/rider-withdrawals",
     rider: (id: string) => `/admin/logistics/riders/${id}`,
     marketplaceCoupons: "/admin/marketplace/coupons",
     marketplaceCollections: "/admin/marketplace/collections",

@@ -135,6 +135,27 @@ export async function completeRiderVehicleStep(userId: string, riderProfileId: s
   });
 }
 
+/** Post-onboarding settings update — same fields as the personal/vehicle onboarding steps, reused for a rider editing their own profile later. */
+export async function updateRiderSettings(
+  userId: string,
+  riderProfileId: string,
+  input: { firstName: string; lastName: string; phone: string; vehicleType: string; vehiclePlateNumber?: string },
+) {
+  return db.$transaction(async (tx) => {
+    await assertOwnsRiderProfile(tx, riderProfileId, userId);
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { firstName: input.firstName, lastName: input.lastName, phone: input.phone },
+    });
+
+    return tx.riderProfile.update({
+      where: { id: riderProfileId },
+      data: { vehicleType: input.vehicleType, vehiclePlateNumber: input.vehiclePlateNumber || null },
+    });
+  });
+}
+
 /**
  * Onboarding step 3: verification documents — submission, not approval.
  * Unlike seller verification, there's no "skip" path: a rider physically
@@ -303,6 +324,34 @@ export async function getRiderWallet(userId: string) {
     available: Number(wallet?.balance ?? 0),
     withdrawn: Number(wallet?.withdrawnBalance ?? 0),
     lifetime: Number(wallet?.totalEarned ?? 0),
+  };
+}
+
+/** Today's/this week's earnings and delivery counts — the rider dashboard's headline stats. */
+export async function getRiderDashboardStats(userId: string) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfWeek.getDate() - 6); // rolling 7-day window, inclusive of today
+
+  const [todayEarnings, weekEarnings, deliveriesToday, deliveriesThisWeek] = await Promise.all([
+    db.ledgerEntry.aggregate({
+      where: { userId, type: "RIDER_PAYOUT_EARNED", createdAt: { gte: startOfToday } },
+      _sum: { amount: true },
+    }),
+    db.ledgerEntry.aggregate({
+      where: { userId, type: "RIDER_PAYOUT_EARNED", createdAt: { gte: startOfWeek } },
+      _sum: { amount: true },
+    }),
+    db.delivery.count({ where: { agentId: userId, status: { in: ["DELIVERED", "COMPLETED"] }, deliveredAt: { gte: startOfToday } } }),
+    db.delivery.count({ where: { agentId: userId, status: { in: ["DELIVERED", "COMPLETED"] }, deliveredAt: { gte: startOfWeek } } }),
+  ]);
+
+  return {
+    todayEarnings: Number(todayEarnings._sum.amount ?? 0),
+    weekEarnings: Number(weekEarnings._sum.amount ?? 0),
+    deliveriesToday,
+    deliveriesThisWeek,
   };
 }
 

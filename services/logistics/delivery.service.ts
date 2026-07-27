@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors";
 import { transitionOrderStatus } from "@/services/orders/order-state-machine";
+import { recordRiderPayoutEarned } from "@/services/finance/ledger.service";
 import type { DeliveryMethod, DeliveryStatus, OrderStatus, DeliveryFulfillmentType, ProofMethod } from "@/generated/prisma/enums";
 import type { DeliveryQuote } from "@/services/logistics/delivery-engine.service";
 
@@ -151,6 +152,10 @@ export async function confirmDeliveryWithProof(riderUserId: string, deliveryId: 
   if (delivery.agentId !== riderUserId) throw new ForbiddenError("You aren't the assigned rider for this delivery");
   if (delivery.proofConfirmedAt) throw new ValidationError("This delivery has already been confirmed");
 
+  const settings = await db.systemSettings.findUnique({ where: { id: "singleton" } });
+  const payoutPercentage = settings?.riderPayoutPercentage ?? 70;
+  const riderPayout = delivery.deliveryFee ? Math.round((Number(delivery.deliveryFee) * payoutPercentage) / 100) : 0;
+
   await db.$transaction(async (tx) => {
     await tx.delivery.update({
       where: { id: deliveryId },
@@ -176,6 +181,20 @@ export async function confirmDeliveryWithProof(riderUserId: string, deliveryId: 
       where: { userId: riderUserId },
       data: { status: stillHasOtherActive > 0 ? "ON_DELIVERY" : "AVAILABLE", totalDeliveries: { increment: 1 } },
     });
+
+    if (riderPayout > 0) {
+      await tx.wallet.upsert({
+        where: { userId: riderUserId },
+        create: { userId: riderUserId, balance: riderPayout, totalEarned: riderPayout },
+        update: { balance: { increment: riderPayout }, totalEarned: { increment: riderPayout } },
+      });
+      await recordRiderPayoutEarned(tx, {
+        amount: riderPayout,
+        userId: riderUserId,
+        orderId: delivery.orderId,
+        note: `Delivery payout (${payoutPercentage}% of ${Number(delivery.deliveryFee)} delivery fee)`,
+      });
+    }
   });
 
   await transitionOrderStatus(delivery.orderId, { type: "RIDER", userId: riderUserId }, "DELIVERED", {

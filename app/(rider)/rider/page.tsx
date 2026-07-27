@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
-import { getRiderProfileByUserId, getRiderActiveDeliveries } from "@/services/logistics/rider.service";
+import { getRiderProfileByUserId, getRiderActiveDeliveries, getRiderDashboardStats } from "@/services/logistics/rider.service";
+import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 import { ROUTES } from "@/lib/constants/routes";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RiderVerificationStatusBanner } from "@/components/rider/RiderVerificationStatusBanner";
-import { Bike } from "lucide-react";
+import { Bike, Wallet, CalendarDays, Star, Package } from "lucide-react";
 import { setRiderAvailabilityAction } from "./actions";
 
 const STATUS_TONE: Record<string, "success" | "warning" | "neutral"> = {
@@ -20,12 +22,14 @@ const STATUS_TONE: Record<string, "success" | "warning" | "neutral"> = {
 
 export default async function RiderDashboardPage() {
   const session = await requireRole(Role.RIDER);
-  const [profile, deliveries] = await Promise.all([
+  const [profile, deliveries, stats] = await Promise.all([
     getRiderProfileByUserId(session.userId),
     getRiderActiveDeliveries(session.userId),
+    getRiderDashboardStats(session.userId),
   ]);
 
   const isVerified = profile.verificationStatus === "VERIFIED";
+  const format = (value: number) => new Intl.NumberFormat("en-NG", { style: "currency", currency: DEFAULT_CURRENCY, maximumFractionDigits: 0 }).format(value);
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,6 +48,17 @@ export default async function RiderDashboardPage() {
           reviewNotes={profile.verification?.reviewNotes}
         />
       )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Earned today" icon={Wallet} value={format(stats.todayEarnings)} />
+        <StatCard label="Earned this week" icon={CalendarDays} value={format(stats.weekEarnings)} />
+        <StatCard label="Deliveries this week" icon={Package} value={String(stats.deliveriesThisWeek)} />
+        <StatCard
+          label="Rating"
+          icon={Star}
+          value={profile.ratingCount > 0 ? `${profile.ratingAverage.toFixed(1)} (${profile.ratingCount})` : "No ratings yet"}
+        />
+      </div>
 
       <Card>
         <CardHeader>
@@ -70,6 +85,12 @@ export default async function RiderDashboardPage() {
       </Card>
 
       <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold text-foreground">Active deliveries</h2>
+          <Link href={ROUTES.rider.history} className="text-sm font-medium text-accent hover:underline">
+            View history →
+          </Link>
+        </div>
         {deliveries.length === 0 && (
           <EmptyState icon={Bike} title="No active deliveries" description="You'll see new assignments here as dispatch sends them." />
         )}

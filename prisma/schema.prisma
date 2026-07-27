@@ -1083,6 +1083,29 @@ model Withdrawal {
   @@map("withdrawals")
 }
 
+/// Mirrors Withdrawal exactly, FK'd to RiderProfile instead of
+/// SellerProfile — a parallel table rather than overloading Withdrawal's
+/// sellerId, since Wallet (which both draw down from) is already
+/// role-agnostic and the review workflow is identical either way.
+model RiderWithdrawal {
+  id             String           @id @default(cuid())
+  riderProfileId String           @map("rider_profile_id")
+  amount         Decimal          @db.Decimal(10, 2)
+  bankName       String           @map("bank_name")
+  accountNumber  String           @map("account_number")
+  accountName    String           @map("account_name")
+  status         WithdrawalStatus @default(REQUESTED)
+  reviewedById   String?          @map("reviewed_by_id")
+  reviewNotes    String?          @map("review_notes")
+  requestedAt    DateTime         @default(now()) @map("requested_at")
+  processedAt    DateTime?        @map("processed_at")
+
+  riderProfile RiderProfile @relation(fields: [riderProfileId], references: [id], onDelete: Cascade)
+
+  @@index([riderProfileId, status])
+  @@map("rider_withdrawals")
+}
+
 /// Every type of money movement the platform ever records. Amounts are
 /// signed from the perspective of the entity they credit/debit: positive
 /// increases what's owed to that entity, negative decreases it. See
@@ -1107,6 +1130,12 @@ enum LedgerEntryType {
   /// platform/logistics revenue, never split into a seller's Transaction
   /// (that only ever covers merchandise commission).
   DELIVERY_FEE_REVENUE
+  /// A rider's cut of a delivery fee, credited to their Wallet on confirmed
+  /// delivery — see SystemSettings.riderPayoutPercentage. Recorded
+  /// independently of DELIVERY_FEE_REVENUE (which books the full fee as
+  /// platform revenue at payment time); reconciling the two into a true
+  /// net-of-rider-pay revenue figure is a known follow-up, not done here.
+  RIDER_PAYOUT_EARNED
 }
 
 /// Append-only financial journal — the authoritative source for every
@@ -1394,6 +1423,7 @@ model RiderProfile {
 
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   verification RiderVerification?
+  withdrawals  RiderWithdrawal[]
 
   @@index([status])
   @@map("rider_profiles")
@@ -1868,6 +1898,11 @@ model SystemSettings {
   /// Extra days beyond escrowHoldDays before an auto-settled amount is
   /// actually paid out — a fraud/chargeback buffer.
   settlementCoolingPeriodDays Int               @default(0) @map("settlement_cooling_period_days")
+  /// Percentage of a delivery's `deliveryFee` credited to the assigned
+  /// rider's wallet on confirmed delivery — the rest stays platform
+  /// revenue (already booked in full at payment time via
+  /// DELIVERY_FEE_REVENUE; see RIDER_PAYOUT_EARNED's doc comment).
+  riderPayoutPercentage       Int               @default(70) @map("rider_payout_percentage")
   updatedById                 String?           @map("updated_by_id")
   updatedAt                   DateTime          @updatedAt @map("updated_at")
 

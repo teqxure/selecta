@@ -29,6 +29,7 @@ export interface SystemSettingsInput {
   maxWithdrawalAmount?: number | null;
   autoWeeklySettlement?: boolean;
   settlementCoolingPeriodDays?: number;
+  riderPayoutPercentage?: number;
 }
 
 export async function updateSystemSettings(adminId: string, data: SystemSettingsInput) {

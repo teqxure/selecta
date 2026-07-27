@@ -100,6 +100,7 @@ const ADMIN_NAV_GROUPS = [
     items: [
       { label: "Dispatch", href: ROUTES.admin.logisticsDispatch, icon: Navigation, permission: "ASSIGN_RIDERS" },
       { label: "Riders", href: ROUTES.admin.logisticsRiders, icon: Bike, permission: "MANAGE_LOGISTICS" },
+      { label: "Rider withdrawals", href: ROUTES.admin.logisticsRiderWithdrawals, icon: Banknote, permission: "MANAGE_LOGISTICS" },
       { label: "Delivery zones", href: ROUTES.admin.logisticsZones, icon: MapPinned, permission: "SUPER_ADMIN_ONLY" },
       { label: "City pricing", href: ROUTES.admin.logisticsPricing, icon: SlidersHorizontal, permission: "SUPER_ADMIN_ONLY" },
       { label: "Logistics partners", href: ROUTES.admin.logisticsPartners, icon: Truck, permission: "SUPER_ADMIN_ONLY" },

@@ -26,6 +26,7 @@ export async function updateSystemSettingsAction(formData: FormData) {
     maxWithdrawalAmount: maxWithdrawalAmount ? Number(maxWithdrawalAmount) : null,
     autoWeeklySettlement: formData.get("autoWeeklySettlement") === "on",
     settlementCoolingPeriodDays: Number(formData.get("settlementCoolingPeriodDays") || 0),
+    riderPayoutPercentage: Number(formData.get("riderPayoutPercentage") || 70),
   });
 
   revalidatePath(ROUTES.admin.settings);

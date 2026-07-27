@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LayoutGrid, Wallet, LogOut } from "lucide-react";
+import { LayoutGrid, Wallet, History, Banknote, Settings, LogOut } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { Logo } from "@/components/ui/Logo";
 import { Footer } from "@/components/layout/Footer";
@@ -14,7 +14,14 @@ const iconProps = { className: "h-4 w-4", strokeWidth: 2 } as const;
 
 const RIDER_NAV_GROUPS: DashboardNavGroup[] = [
   { items: [{ label: "Deliveries", href: ROUTES.rider.dashboard, icon: <LayoutGrid {...iconProps} /> }] },
-  { items: [{ label: "Wallet", href: ROUTES.rider.wallet, icon: <Wallet {...iconProps} /> }] },
+  {
+    items: [
+      { label: "History", href: ROUTES.rider.history, icon: <History {...iconProps} /> },
+      { label: "Wallet", href: ROUTES.rider.wallet, icon: <Wallet {...iconProps} /> },
+      { label: "Withdrawals", href: ROUTES.rider.withdrawals, icon: <Banknote {...iconProps} /> },
+    ],
+  },
+  { items: [{ label: "Settings", href: ROUTES.rider.settings, icon: <Settings {...iconProps} /> }] },
 ];
 
 export default async function RiderLayout({ children }: { children: ReactNode }) {

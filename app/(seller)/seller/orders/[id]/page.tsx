@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { DeliveryTrackingPanel } from "@/components/logistics/DeliveryTrackingPanel";
 import { ROUTES } from "@/lib/constants/routes";
 import { advanceOrderStatusAction, setDeliveryDetailsAction } from "./actions";
 import { getAllowedNextStatuses } from "@/services/orders/order-state-machine";
@@ -147,6 +148,26 @@ export default async function SellerOrderDetailPage({ params }: { params: Promis
           ))}
         </CardContent>
       </Card>
+
+      {myItems.some((item) => item.returnRequest) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Returns</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {myItems
+              .filter((item) => item.returnRequest)
+              .map((item) => (
+                <div key={item.id} className="flex items-center justify-between text-sm">
+                  <span className="text-foreground">{item.product.title}</span>
+                  <Badge tone="neutral">Return {item.returnRequest!.status.replaceAll("_", " ").toLowerCase()}</Badge>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {order.delivery?.agentId && <DeliveryTrackingPanel orderId={order.id} />}
 
       {order.delivery && order.delivery.events.length > 0 && (
         <Card>

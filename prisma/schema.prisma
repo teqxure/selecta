@@ -20,6 +20,9 @@ enum Role {
   BUYER
   SELLER
   AGENT
+  /// In-house delivery rider — distinct from AGENT, which is an unrelated
+  /// seller-support-liaison assignment (see SellerProfile.agentId).
+  RIDER
   ADMIN
   SUPER_ADMIN
 }
@@ -129,12 +132,38 @@ enum TransactionStatus {
   REFUNDED
 }
 
+/// PENDING/PICKED_UP/IN_TRANSIT/DELIVERED/FAILED are the original values —
+/// still driven by `ORDER_STATUS_TO_DELIVERY_STATUS` in delivery.service.ts
+/// and never removed. The rest were added for the rider-driven dispatch
+/// flow, which transitions through the finer-grained timeline the buyer/
+/// seller tracking panel displays.
 enum DeliveryStatus {
   PENDING
+  PREPARING
+  READY_FOR_PICKUP
+  RIDER_ASSIGNED
   PICKED_UP
   IN_TRANSIT
+  ON_THE_WAY
+  NEARBY
   DELIVERED
+  COMPLETED
   FAILED
+}
+
+enum RiderStatus {
+  OFFLINE
+  AVAILABLE
+  ON_DELIVERY
+  BREAK
+}
+
+enum ProofMethod {
+  PIN
+  QR
+  PHOTO
+  SIGNATURE
+  GPS
 }
 
 enum DeliveryMethod {
@@ -227,6 +256,10 @@ model User {
   /// stored); SELLER/BUYER get a fixed role-wide set defined in code, not
   /// per-user grants. See lib/auth/permissions.ts.
   permissions           String[]                 @default([])
+  /// Optional custom Permission Engine role — only meaningful when role is
+  /// ADMIN, layered alongside the individually-granted `permissions[]`
+  /// above (union of both). See lib/auth/permissions.ts.
+  staffRoleId           String?                  @map("staff_role_id")
   city                  String?
   state                 String?
   /// Ambient "roughly where the buyer is right now" signal for homepage
@@ -288,6 +321,21 @@ model User {
   logisticsPartnersUpdated   LogisticsPartner[]
   deliveryRulesUpdated       DeliveryRule[]
   deliveryHolidaysCreated    DeliveryHoliday[]
+
+  staffRole                      StaffRole?               @relation("StaffAssignment", fields: [staffRoleId], references: [id], onDelete: SetNull)
+  staffRolesCreated              StaffRole[]              @relation("StaffRoleCreatedBy")
+  riderProfile                   RiderProfile?
+  complianceDocumentTypesCreated ComplianceDocumentType[]
+  sellerDocumentsReviewed        SellerDocument[]
+  couponsCreated                 Coupon[]
+  couponRedemptions              CouponRedemption[]
+  collectionsCreated             Collection[]
+  campaignsCreated               MarketingCampaign[]
+  returnsAsBuyer                 ReturnRequest[]          @relation("BuyerReturns")
+  returnsResolved                ReturnRequest[]          @relation("ResolvedReturns")
+  supportTickets                 SupportTicket[]          @relation("SupportTicketsAsUser")
+  supportTicketsAssigned         SupportTicket[]          @relation("SupportTicketsAssigned")
+  supportTicketMessages          SupportTicketMessage[]
 
   @@index([role])
   @@index([status])
@@ -355,6 +403,8 @@ model SellerProfile {
   growthPartnerApplication GrowthPartnerApplication[]
   offers                   Offer[]
   aiFeatureUsages          AiFeatureUsage[]
+  documents                SellerDocument[]
+  returnRequests           ReturnRequest[]
 
   @@index([verificationStatus])
   @@index([agentId])
@@ -397,6 +447,72 @@ model SellerVerification {
 
   @@index([status])
   @@map("seller_verifications")
+}
+
+enum DocumentRequirement {
+  REQUIRED
+  OPTIONAL
+  CONDITIONAL
+}
+
+enum DocumentReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Super Admin-configurable document catalog — deliberately NOT a fixed set
+/// of document types (unlike the 3-field `SellerVerification` above, which
+/// stays as the onboarding bootstrap step). `category` is a free string
+/// (e.g. "Individual", "Business") so different seller types can require
+/// different documents without a schema change.
+model ComplianceDocumentType {
+  id            String              @id @default(cuid())
+  name          String
+  slug          String              @unique
+  description   String?
+  category      String?
+  requirement   DocumentRequirement @default(REQUIRED)
+  conditionNote String?             @map("condition_note")
+  isActive      Boolean             @default(true) @map("is_active")
+  sortOrder     Int                 @default(0) @map("sort_order")
+  createdById   String?             @map("created_by_id")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  createdBy User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  documents SellerDocument[]
+
+  @@index([isActive])
+  @@map("compliance_document_types")
+}
+
+/// A seller's uploaded instance of a `ComplianceDocumentType`. Re-upload is
+/// just a new row for the same (sellerProfileId, documentTypeId) pair —
+/// review/approval history is read back from `AuditLog` (entityType
+/// "SellerDocument"), not duplicated into a history table here.
+model SellerDocument {
+  id              String               @id @default(cuid())
+  sellerProfileId String               @map("seller_profile_id")
+  documentTypeId  String               @map("document_type_id")
+  fileUrl         String               @map("file_url")
+  status          DocumentReviewStatus @default(PENDING)
+  reviewedById    String?              @map("reviewed_by_id")
+  reviewedAt      DateTime?            @map("reviewed_at")
+  reviewNotes     String?              @map("review_notes")
+  rejectionReason String?              @map("rejection_reason")
+  submittedAt     DateTime             @default(now()) @map("submitted_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  sellerProfile SellerProfile          @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  documentType  ComplianceDocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  reviewedBy    User?                  @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([sellerProfileId])
+  @@index([documentTypeId])
+  @@index([status])
+  @@map("seller_documents")
 }
 
 model Address {
@@ -505,6 +621,7 @@ model Category {
   products        Product[]        @relation("ProductCategory")
   subcategoryOf   Product[]        @relation("ProductSubcategory")
   commissionRules CommissionRule[]
+  coupons         Coupon[]
 
   @@index([parentId])
   @@map("categories")
@@ -549,9 +666,9 @@ model Product {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
-  seller         SellerProfile   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  category       Category        @relation("ProductCategory", fields: [categoryId], references: [id])
-  subcategory    Category?       @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  seller         SellerProfile       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category       Category            @relation("ProductCategory", fields: [categoryId], references: [id])
+  subcategory    Category?           @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
   images         ProductImage[]
   orderItems     OrderItem[]
   reviews        Review[]
@@ -561,6 +678,7 @@ model Product {
   boostCampaigns BoostCampaign[]
   conversations  Conversation[]
   offers         Offer[]
+  collections    CollectionProduct[]
 
   @@index([sellerId])
   @@index([categoryId])
@@ -666,6 +784,129 @@ model CartItem {
 }
 
 // ---------------------------------------------------------------------------
+// Marketing — coupons, curated collections, campaigns
+// ---------------------------------------------------------------------------
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+/// Buyer-facing discount code. Never applied client-side — checkoutAction
+/// re-validates and re-prices server-side, the same never-trust-the-client
+/// principle already used for delivery pricing.
+model Coupon {
+  id                   String       @id @default(cuid())
+  code                 String       @unique
+  description          String?
+  discountType         DiscountType @map("discount_type")
+  discountValue        Decimal      @map("discount_value") @db.Decimal(10, 2)
+  minOrderAmount       Decimal?     @map("min_order_amount") @db.Decimal(10, 2)
+  /// Caps the discount for PERCENTAGE coupons (irrelevant for FIXED_AMOUNT).
+  maxDiscountAmount    Decimal?     @map("max_discount_amount") @db.Decimal(10, 2)
+  usageLimit           Int?         @map("usage_limit")
+  usageLimitPerUser    Int?         @map("usage_limit_per_user")
+  usedCount            Int          @default(0) @map("used_count")
+  startsAt             DateTime?    @map("starts_at")
+  endsAt               DateTime?    @map("ends_at")
+  isActive             Boolean      @default(true) @map("is_active")
+  applicableCategoryId String?      @map("applicable_category_id")
+  createdById          String?      @map("created_by_id")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  applicableCategory Category?           @relation(fields: [applicableCategoryId], references: [id], onDelete: SetNull)
+  createdBy          User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  orders             Order[]
+  redemptions        CouponRedemption[]
+  campaigns          MarketingCampaign[]
+
+  @@index([isActive])
+  @@map("coupons")
+}
+
+/// One row per successful redemption — the source of truth for
+/// usageLimit/usageLimitPerUser enforcement (counted live, `Coupon.usedCount`
+/// is a fast denormalized counter kept in sync alongside it).
+model CouponRedemption {
+  id             String   @id @default(cuid())
+  couponId       String   @map("coupon_id")
+  userId         String   @map("user_id")
+  orderId        String   @unique @map("order_id")
+  discountAmount Decimal  @map("discount_amount") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, userId])
+  @@map("coupon_redemptions")
+}
+
+/// Curated, admin-ordered product grouping — distinct from `Category`
+/// (taxonomy) and from `BoostCampaign` (seller-paid single-product boost).
+model Collection {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?  @map("image_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  products  CollectionProduct[]
+  campaigns MarketingCampaign[]
+
+  @@index([isActive])
+  @@map("collections")
+}
+
+model CollectionProduct {
+  id           String   @id @default(cuid())
+  collectionId String   @map("collection_id")
+  productId    String   @map("product_id")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, productId])
+  @@map("collection_products")
+}
+
+/// A named marketing initiative wrapping an optional Collection and/or
+/// Coupon with a date range — the thing an admin points a homepage banner
+/// or notification blast at.
+model MarketingCampaign {
+  id             String    @id @default(cuid())
+  name           String
+  slug           String    @unique
+  description    String?
+  bannerImageUrl String?   @map("banner_image_url")
+  collectionId   String?   @map("collection_id")
+  couponId       String?   @map("coupon_id")
+  startsAt       DateTime? @map("starts_at")
+  endsAt         DateTime? @map("ends_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdById    String?   @map("created_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  coupon     Coupon?     @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  createdBy  User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@map("marketing_campaigns")
+}
+
+// ---------------------------------------------------------------------------
 // Commerce
 // ---------------------------------------------------------------------------
 
@@ -678,21 +919,27 @@ model Order {
   /// orders created before the delivery engine existed.
   totalAmount     Decimal     @map("total_amount") @db.Decimal(10, 2)
   deliveryFee     Decimal     @default(0) @map("delivery_fee") @db.Decimal(10, 2)
+  /// Coupon discount applied at checkout — itemsSubtotal + deliveryFee -
+  /// discountAmount = totalAmount, all three auditable line items.
+  discountAmount  Decimal     @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  couponId        String?     @map("coupon_id")
   currency        String      @default("NGN")
   shippingAddress Json        @map("shipping_address")
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
-  buyer         User                 @relation(fields: [buyerId], references: [id])
-  items         OrderItem[]
-  payment       Payment?
-  delivery      Delivery?
-  transactions  Transaction[]
-  statusHistory OrderStatusHistory[]
-  disputes      Dispute[]
-  ledgerEntries LedgerEntry[]
-  conversations Conversation[]
-  offer         Offer?
+  buyer            User                 @relation(fields: [buyerId], references: [id])
+  items            OrderItem[]
+  payment          Payment?
+  delivery         Delivery?
+  transactions     Transaction[]
+  statusHistory    OrderStatusHistory[]
+  disputes         Dispute[]
+  ledgerEntries    LedgerEntry[]
+  conversations    Conversation[]
+  offer            Offer?
+  coupon           Coupon?              @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponRedemption CouponRedemption?
 
   @@index([buyerId])
   @@index([status])
@@ -725,9 +972,10 @@ model OrderItem {
   unitPrice Decimal  @map("unit_price") @db.Decimal(10, 2)
   createdAt DateTime @default(now()) @map("created_at")
 
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
-  review  Review?
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id])
+  review        Review?
+  returnRequest ReturnRequest?
 
   @@index([orderId])
   @@index([productId])
@@ -906,6 +1154,9 @@ model Review {
   orderItemId String   @unique @map("order_item_id")
   rating      Int
   comment     String?
+  /// Soft-moderation by admin — hidden reviews are excluded from public
+  /// queries but kept for record-keeping rather than hard-deleted.
+  isHidden    Boolean  @default(false) @map("is_hidden")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -945,6 +1196,17 @@ model Delivery {
   estimatedMinutes   Int?                    @map("estimated_minutes")
   fulfillmentType    DeliveryFulfillmentType @default(STANDARD) @map("fulfillment_type")
   logisticsPartnerId String?                 @map("logistics_partner_id")
+  /// Proof-of-delivery — captured by the rider at hand-off. `proofMethod`
+  /// records which of the multiple supported confirmation methods was
+  /// actually used; only the matching field(s) below are populated.
+  proofMethod        ProofMethod?            @map("proof_method")
+  proofPin           String?                 @map("proof_pin")
+  proofPhotoUrl      String?                 @map("proof_photo_url")
+  proofSignatureUrl  String?                 @map("proof_signature_url")
+  proofNotes         String?                 @map("proof_notes")
+  proofLatitude      Float?                  @map("proof_latitude")
+  proofLongitude     Float?                  @map("proof_longitude")
+  proofConfirmedAt   DateTime?               @map("proof_confirmed_at")
   createdAt          DateTime                @default(now()) @map("created_at")
   updatedAt          DateTime                @updatedAt @map("updated_at")
 
@@ -1086,6 +1348,34 @@ model DeliveryHoliday {
 
   @@unique([date])
   @@map("delivery_holidays")
+}
+
+/// In-house delivery rider — a 1:1 profile extension of a `User` with
+/// `role: RIDER`, the same shape `SellerProfile` uses for `role: SELLER`.
+/// Deliveries are assigned by writing a rider's `User.id` onto the
+/// already-existing (and previously unused) `Delivery.agentId` — no change
+/// to that FK was needed. Earnings reuse the existing role-agnostic
+/// `Wallet` model (already keyed by `userId`, not by seller).
+model RiderProfile {
+  id                 String      @id @default(cuid())
+  userId             String      @unique @map("user_id")
+  vehicleType        String?     @map("vehicle_type")
+  vehiclePlateNumber String?     @map("vehicle_plate_number")
+  status             RiderStatus @default(OFFLINE)
+  latitude           Float?
+  longitude          Float?
+  locationUpdatedAt  DateTime?   @map("location_updated_at")
+  ratingAverage      Float       @default(0) @map("rating_average")
+  ratingCount        Int         @default(0) @map("rating_count")
+  totalDeliveries    Int         @default(0) @map("total_deliveries")
+  isActive           Boolean     @default(true) @map("is_active")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("rider_profiles")
 }
 
 // ---------------------------------------------------------------------------
@@ -1362,32 +1652,182 @@ model Dispute {
 }
 
 // ---------------------------------------------------------------------------
-// Super Admin platform controls
+// Customer Experience Center — returns (distinct from Disputes) and
+// general support tickets
 // ---------------------------------------------------------------------------
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  ITEM_RECEIVED
+  COMPLETED
+}
+
+enum ReturnOutcome {
+  FULL_REFUND
+  PARTIAL_REFUND
+  REPLACEMENT
+  REFUND_WITHOUT_RETURN
+  REJECTED
+}
+
+/// Item-level, buyer-initiated, no-fault-implied — kept distinct from
+/// `Dispute` (order-level, fault/blame, drives escrow release-or-refund).
+/// A buyer wanting to send something back for any reason files a Return;
+/// a buyer alleging the seller did something wrong files a Dispute.
+model ReturnRequest {
+  id              String         @id @default(cuid())
+  orderItemId     String         @unique @map("order_item_id")
+  buyerId         String         @map("buyer_id")
+  sellerId        String         @map("seller_id")
+  reason          String
+  evidenceUrls    String[]       @map("evidence_urls")
+  status          ReturnStatus   @default(REQUESTED)
+  outcome         ReturnOutcome?
+  refundAmount    Decimal?       @map("refund_amount") @db.Decimal(10, 2)
+  resolvedById    String?        @map("resolved_by_id")
+  resolvedAt      DateTime?      @map("resolved_at")
+  resolutionNotes String?        @map("resolution_notes")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  orderItem  OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  buyer      User          @relation("BuyerReturns", fields: [buyerId], references: [id])
+  seller     SellerProfile @relation(fields: [sellerId], references: [id])
+  resolvedBy User?         @relation("ResolvedReturns", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([sellerId])
+  @@map("return_requests")
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+/// General buyer help requests that aren't order-specific (unlike
+/// `Dispute`). "Escalation" is just `priority: URGENT` + `escalatedAt` set,
+/// not a separate entity.
+model SupportTicket {
+  id           String                @id @default(cuid())
+  userId       String                @map("user_id")
+  subject      String
+  category     String?
+  description  String
+  status       SupportTicketStatus   @default(OPEN)
+  priority     SupportTicketPriority @default(NORMAL)
+  escalatedAt  DateTime?             @map("escalated_at")
+  assignedToId String?               @map("assigned_to_id")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+
+  user       User                   @relation("SupportTicketsAsUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedTo User?                  @relation("SupportTicketsAssigned", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages   SupportTicketMessage[]
+
+  @@index([status])
+  @@index([assignedToId])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String   @map("ticket_id")
+  senderId  String   @map("sender_id")
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Permission Engine — Founder creates unlimited custom staff roles, each a
+// named bundle of permissions. Layered underneath the existing
+// `getEffectivePermissions()` (lib/auth/permissions.ts) — every
+// `requireRole`/`requirePermission` call site is unchanged; only what
+// backs "does this ADMIN have permission X" grows to also check the
+// assigned StaffRole. SUPER_ADMIN's implicit wildcard is untouched by any
+// of this — "Founder" is just that role's display label.
+// ---------------------------------------------------------------------------
+
+/// A named, reusable bundle of permissions assignable to ADMIN-role users.
+/// `isSystemDefined` marks the ~18 seeded defaults (Finance Manager,
+/// Compliance Officer, etc.) — still editable, just not silently
+/// deletable by an accidental cleanup pass.
+model StaffRole {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  slug            String   @unique
+  description     String?
+  isSystemDefined Boolean  @default(false) @map("is_system_defined")
+  createdById     String?  @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  createdBy   User?                 @relation("StaffRoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  permissions StaffRolePermission[]
+  users       User[]                @relation("StaffAssignment")
+
+  @@map("staff_roles")
+}
+
+model StaffRolePermission {
+  id         String @id @default(cuid())
+  roleId     String @map("role_id")
+  permission String
+
+  role StaffRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
+  @@map("staff_role_permissions")
+}
 
 /// Singleton row (fixed id "singleton") — global marketplace switches.
 model SystemSettings {
-  id                        String            @id @default("singleton")
-  platformName              String            @default("Selecta") @map("platform_name")
-  maintenanceMode           Boolean           @default(false) @map("maintenance_mode")
-  maintenanceMessage        String?           @map("maintenance_message")
-  allowNewSellers           Boolean           @default(true) @map("allow_new_sellers")
-  allowNewBuyers            Boolean           @default(true) @map("allow_new_buyers")
-  requireProductApproval    Boolean           @default(true) @map("require_product_approval")
-  requireSellerVerification Boolean           @default(true) @map("require_seller_verification")
-  marketplaceStatus         MarketplaceStatus @default(OPEN) @map("marketplace_status")
+  id                          String            @id @default("singleton")
+  platformName                String            @default("Selecta") @map("platform_name")
+  maintenanceMode             Boolean           @default(false) @map("maintenance_mode")
+  maintenanceMessage          String?           @map("maintenance_message")
+  allowNewSellers             Boolean           @default(true) @map("allow_new_sellers")
+  allowNewBuyers              Boolean           @default(true) @map("allow_new_buyers")
+  requireProductApproval      Boolean           @default(true) @map("require_product_approval")
+  requireSellerVerification   Boolean           @default(true) @map("require_seller_verification")
+  marketplaceStatus           MarketplaceStatus @default(OPEN) @map("marketplace_status")
   /// "From" identity for every templated email the notification engine
   /// sends — e.g. "Selecta" <notifications@selectapick.store>. Blank
   /// sender email falls back to a hardcoded default at send time rather
   /// than failing the send outright.
-  notificationSenderName    String            @default("Selecta") @map("notification_sender_name")
-  notificationSenderEmail   String?           @map("notification_sender_email")
+  notificationSenderName      String            @default("Selecta") @map("notification_sender_name")
+  notificationSenderEmail     String?           @map("notification_sender_email")
   /// Cash price per day for a product boost campaign when a seller has no
   /// (or insufficient) subscription boost credits to cover it — Super
   /// Admin-configurable, never hardcoded in application code.
-  boostPricePerDay          Decimal           @default(500) @map("boost_price_per_day") @db.Decimal(10, 2)
-  updatedById               String?           @map("updated_by_id")
-  updatedAt                 DateTime          @updatedAt @map("updated_at")
+  boostPricePerDay            Decimal           @default(500) @map("boost_price_per_day") @db.Decimal(10, 2)
+  /// Days an escrowed Transaction is held before it's eligible for
+  /// automatic weekly settlement (see the weekly-settlement cron).
+  escrowHoldDays              Int               @default(3) @map("escrow_hold_days")
+  minWithdrawalAmount         Decimal           @default(1000) @map("min_withdrawal_amount") @db.Decimal(10, 2)
+  maxWithdrawalAmount         Decimal?          @map("max_withdrawal_amount") @db.Decimal(10, 2)
+  autoWeeklySettlement        Boolean           @default(false) @map("auto_weekly_settlement")
+  /// Extra days beyond escrowHoldDays before an auto-settled amount is
+  /// actually paid out — a fraud/chargeback buffer.
+  settlementCoolingPeriodDays Int               @default(0) @map("settlement_cooling_period_days")
+  updatedById                 String?           @map("updated_by_id")
+  updatedAt                   DateTime          @updatedAt @map("updated_at")
 
   updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 

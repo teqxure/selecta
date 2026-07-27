@@ -17,7 +17,7 @@ interface PageHeaderProps {
 }
 
 /** The consistent header every dashboard page should open with — breadcrumbs so nobody feels trapped, a clear title, and a slot for the page's primary actions. */
-export function PageHeader({ eyebrow, breadcrumbs, title, description, actions }: PageHeaderProps) {
+export function PageHeader({ eyebrow = "Selecta HQ", breadcrumbs, title, description, actions }: PageHeaderProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>

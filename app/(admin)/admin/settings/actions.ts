@@ -10,6 +10,8 @@ import type { MarketplaceStatus } from "@/generated/prisma/enums";
 export async function updateSystemSettingsAction(formData: FormData) {
   const session = await requireRole(Role.SUPER_ADMIN);
 
+  const maxWithdrawalAmount = String(formData.get("maxWithdrawalAmount") || "");
+
   await updateSystemSettings(session.userId, {
     platformName: String(formData.get("platformName") || "Selecta"),
     maintenanceMode: formData.get("maintenanceMode") === "on",
@@ -19,6 +21,11 @@ export async function updateSystemSettingsAction(formData: FormData) {
     requireProductApproval: formData.get("requireProductApproval") === "on",
     requireSellerVerification: formData.get("requireSellerVerification") === "on",
     marketplaceStatus: String(formData.get("marketplaceStatus")) as MarketplaceStatus,
+    escrowHoldDays: Number(formData.get("escrowHoldDays") || 3),
+    minWithdrawalAmount: Number(formData.get("minWithdrawalAmount") || 1000),
+    maxWithdrawalAmount: maxWithdrawalAmount ? Number(maxWithdrawalAmount) : null,
+    autoWeeklySettlement: formData.get("autoWeeklySettlement") === "on",
+    settlementCoolingPeriodDays: Number(formData.get("settlementCoolingPeriodDays") || 0),
   });
 
   revalidatePath(ROUTES.admin.settings);

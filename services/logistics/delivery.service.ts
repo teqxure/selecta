@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors";
-import type { DeliveryMethod, DeliveryStatus, OrderStatus, DeliveryFulfillmentType } from "@/generated/prisma/enums";
+import { transitionOrderStatus } from "@/services/orders/order-state-machine";
+import type { DeliveryMethod, DeliveryStatus, OrderStatus, DeliveryFulfillmentType, ProofMethod } from "@/generated/prisma/enums";
 import type { DeliveryQuote } from "@/services/logistics/delivery-engine.service";
 
 /** An order's OrderStatus drives the buyer/seller-facing lifecycle; DeliveryStatus is the narrower logistics sub-track riding alongside it. */
@@ -106,4 +107,110 @@ export async function setDeliveryQuote(
       method: fulfillmentType === "PICKUP" ? "MANUAL" : delivery.method,
     },
   });
+}
+
+const RIDER_ADVANCEABLE_STATUSES: DeliveryStatus[] = ["PICKED_UP", "IN_TRANSIT", "ON_THE_WAY", "NEARBY"];
+
+/** A rider moving their own assigned delivery through the granular in-transit states — separate from the DELIVERED/proof step below. */
+export async function advanceDeliveryStatusByRider(riderUserId: string, deliveryId: string, nextStatus: DeliveryStatus, note?: string) {
+  if (!RIDER_ADVANCEABLE_STATUSES.includes(nextStatus)) {
+    throw new ValidationError(`A rider cannot set delivery status to ${nextStatus} directly`);
+  }
+
+  const delivery = await db.delivery.findUnique({ where: { id: deliveryId } });
+  if (!delivery) throw new NotFoundError("Delivery");
+  if (delivery.agentId !== riderUserId) throw new ForbiddenError("You aren't the assigned rider for this delivery");
+
+  return db.$transaction(async (tx) => {
+    const updated = await tx.delivery.update({ where: { id: deliveryId }, data: { status: nextStatus } });
+    await tx.deliveryEvent.create({ data: { deliveryId, status: nextStatus, note } });
+    return updated;
+  });
+}
+
+export interface ProofOfDeliveryInput {
+  method: ProofMethod;
+  pin?: string;
+  photoUrl?: string;
+  signatureUrl?: string;
+  notes?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+/**
+ * Rider hand-off confirmation — records whichever proof fields match the
+ * chosen method, then drives the Order forward to DELIVERED through the
+ * central state machine (via the RIDER actor type) so the buyer
+ * notification and OrderStatusHistory stay the single source of truth,
+ * exactly as they already are for the seller-driven path.
+ */
+export async function confirmDeliveryWithProof(riderUserId: string, deliveryId: string, proof: ProofOfDeliveryInput) {
+  const delivery = await db.delivery.findUnique({ where: { id: deliveryId } });
+  if (!delivery) throw new NotFoundError("Delivery");
+  if (delivery.agentId !== riderUserId) throw new ForbiddenError("You aren't the assigned rider for this delivery");
+  if (delivery.proofConfirmedAt) throw new ValidationError("This delivery has already been confirmed");
+
+  await db.$transaction(async (tx) => {
+    await tx.delivery.update({
+      where: { id: deliveryId },
+      data: {
+        status: "DELIVERED",
+        deliveredAt: new Date(),
+        proofMethod: proof.method,
+        proofPin: proof.pin ?? null,
+        proofPhotoUrl: proof.photoUrl ?? null,
+        proofSignatureUrl: proof.signatureUrl ?? null,
+        proofNotes: proof.notes ?? null,
+        proofLatitude: proof.latitude ?? null,
+        proofLongitude: proof.longitude ?? null,
+        proofConfirmedAt: new Date(),
+      },
+    });
+    await tx.deliveryEvent.create({ data: { deliveryId, status: "DELIVERED", note: `Proof of delivery: ${proof.method}` } });
+
+    const stillHasOtherActive = await tx.delivery.count({
+      where: { agentId: riderUserId, id: { not: deliveryId }, status: { notIn: ["DELIVERED", "COMPLETED", "FAILED"] } },
+    });
+    await tx.riderProfile.update({
+      where: { userId: riderUserId },
+      data: { status: stillHasOtherActive > 0 ? "ON_DELIVERY" : "AVAILABLE", totalDeliveries: { increment: 1 } },
+    });
+  });
+
+  await transitionOrderStatus(delivery.orderId, { type: "RIDER", userId: riderUserId }, "DELIVERED", {
+    note: `Delivered by rider (proof: ${proof.method})`,
+  });
+
+  return db.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+}
+
+/** Read-only polling endpoint for buyer/seller/HQ live tracking — client re-fetches every few seconds, no push infra required. */
+export async function getDeliveryTracking(orderId: string) {
+  const delivery = await db.delivery.findUnique({
+    where: { orderId },
+    include: {
+      agent: { include: { riderProfile: true } },
+      events: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  if (!delivery) throw new NotFoundError("Delivery");
+
+  return {
+    status: delivery.status,
+    fulfillmentType: delivery.fulfillmentType,
+    estimatedAt: delivery.estimatedAt,
+    deliveredAt: delivery.deliveredAt,
+    trackingCode: delivery.trackingCode,
+    courier: delivery.courier,
+    rider: delivery.agent
+      ? {
+          name: `${delivery.agent.firstName} ${delivery.agent.lastName}`,
+          latitude: delivery.agent.riderProfile?.latitude ?? null,
+          longitude: delivery.agent.riderProfile?.longitude ?? null,
+          locationUpdatedAt: delivery.agent.riderProfile?.locationUpdatedAt ?? null,
+        }
+      : null,
+    events: delivery.events.map((event) => ({ status: event.status, note: event.note, createdAt: event.createdAt })),
+  };
 }

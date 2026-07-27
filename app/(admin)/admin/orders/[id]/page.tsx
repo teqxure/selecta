@@ -7,6 +7,7 @@ import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
+import { DeliveryTrackingPanel } from "@/components/logistics/DeliveryTrackingPanel";
 import { adminSetOrderStatusAction, releaseTransactionAction, refundTransactionAction } from "./actions";
 
 const ALL_STATUSES = [
@@ -145,6 +146,8 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           </p>
         </CardContent>
       </Card>
+
+      {order.delivery?.agentId && <DeliveryTrackingPanel orderId={order.id} />}
 
       {order.delivery && (
         <Card>

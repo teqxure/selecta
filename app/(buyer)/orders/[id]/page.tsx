@@ -9,9 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
+import { DeliveryTrackingPanel } from "@/components/logistics/DeliveryTrackingPanel";
 import { confirmDeliveryAction, startOrderSupportConversationAction } from "./actions";
 import { DisputeForm } from "./dispute-form";
 import { ReviewForm } from "./review-form";
+import { ReturnRequestForm } from "./return-request-form";
 
 const DISPUTABLE_STATUSES = new Set(["PAID", "PROCESSING", "READY_FOR_PICKUP", "IN_TRANSIT", "DELIVERED", "COMPLETED"]);
 
@@ -105,6 +107,26 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
         </CardContent>
       </Card>
 
+      {(order.status === "DELIVERED" || order.status === "COMPLETED") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Returns</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {order.items.map((item) =>
+              item.returnRequest ? (
+                <div key={item.id} className="flex items-center justify-between rounded-lg border border-border p-3 text-sm">
+                  <span className="text-foreground">{item.product.title}</span>
+                  <Badge tone="neutral">Return {item.returnRequest.status.replaceAll("_", " ").toLowerCase()}</Badge>
+                </div>
+              ) : (
+                <ReturnRequestForm key={item.id} orderId={order.id} orderItemId={item.id} productTitle={item.product.title} />
+              ),
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {reviewableItems.length > 0 && (
         <Card>
           <CardHeader>
@@ -117,6 +139,8 @@ export default async function BuyerOrderDetailPage({ params }: { params: Promise
           </CardContent>
         </Card>
       )}
+
+      {order.delivery?.agentId && <DeliveryTrackingPanel orderId={order.id} />}
 
       {order.delivery &&
         (order.delivery.pickupLocation || order.delivery.trackingCode || order.delivery.events.length > 0) && (

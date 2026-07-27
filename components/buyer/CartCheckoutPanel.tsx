@@ -209,18 +209,29 @@ export function CartCheckoutPanel({ addresses, sellerGroups }: { addresses: Chec
       ))}
 
       <Card>
-        <CardContent className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Items</span>
-            <span>{formatNaira(itemsSubtotal)}</span>
+        <CardContent className="flex flex-col gap-3 p-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              name="couponCode"
+              placeholder="Coupon code (optional)"
+              className="h-10 flex-1 rounded-lg border border-border bg-background px-3 text-sm uppercase text-foreground placeholder:normal-case"
+            />
           </div>
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Delivery</span>
-            <span>{formatNaira(deliveryTotal)}</span>
-          </div>
-          <div className="flex items-center justify-between border-t border-border pt-1.5 font-medium text-secondary-foreground">
-            <span>Total</span>
-            <span className="text-lg font-semibold text-accent">{formatNaira(itemsSubtotal + deliveryTotal)}</span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Items</span>
+              <span>{formatNaira(itemsSubtotal)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Delivery</span>
+              <span>{formatNaira(deliveryTotal)}</span>
+            </div>
+            <p className="text-xs text-muted-foreground">A valid coupon is applied at checkout and reflected on your order confirmation.</p>
+            <div className="flex items-center justify-between border-t border-border pt-1.5 font-medium text-secondary-foreground">
+              <span>Total</span>
+              <span className="text-lg font-semibold text-accent">{formatNaira(itemsSubtotal + deliveryTotal)}</span>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -9,6 +9,7 @@ import { createOrder } from "@/services/orders/order.service";
 import { initiateCheckoutForOrder } from "@/services/payments/checkout.service";
 import { calculateDeliveryQuote, resolveBuyerCoordinates, resolveFulfillmentPrice } from "@/services/logistics/delivery-engine.service";
 import { setDeliveryQuote } from "@/services/logistics/delivery.service";
+import { validateAndPriceCoupon } from "@/services/marketing/coupon.service";
 import { isAppError, RateLimitError, ValidationError } from "@/lib/errors";
 import { checkCheckoutRateLimit } from "@/lib/security/rate-limit";
 import { db } from "@/lib/db";
@@ -74,6 +75,14 @@ export async function checkoutAction(_prevState: CheckoutActionState, formData: 
       singleSellerQuote.push({ quote, fulfillmentType, fee });
     }
 
+    const couponCode = String(formData.get("couponCode") || "").trim();
+    let discount: { couponId: string; discountAmount: number } | undefined;
+    if (couponCode) {
+      const itemsSubtotal = items.reduce((sum, item) => sum + Number(item.product.price) * item.quantity, 0);
+      const categoryIds = [...new Set(items.map((item) => item.product.categoryId))];
+      discount = await validateAndPriceCoupon(couponCode, session.userId, itemsSubtotal, categoryIds);
+    }
+
     const order = await createOrder(
       session.userId,
       items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
@@ -90,6 +99,7 @@ export async function checkoutAction(_prevState: CheckoutActionState, formData: 
         longitude: address.longitude ?? undefined,
       },
       totalDeliveryFee,
+      discount,
     );
 
     try {

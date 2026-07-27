@@ -24,6 +24,11 @@ export interface SystemSettingsInput {
   marketplaceStatus?: MarketplaceStatus;
   notificationSenderName?: string;
   notificationSenderEmail?: string | null;
+  escrowHoldDays?: number;
+  minWithdrawalAmount?: number;
+  maxWithdrawalAmount?: number | null;
+  autoWeeklySettlement?: boolean;
+  settlementCoolingPeriodDays?: number;
 }
 
 export async function updateSystemSettings(adminId: string, data: SystemSettingsInput) {

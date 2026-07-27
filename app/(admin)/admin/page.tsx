@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Users, ShieldCheck, Wallet, Banknote, Gavel, Activity, Plug } from "lucide-react";
+import { Users, ShieldCheck, Wallet, Banknote, Gavel, Activity, Plug, Truck, Undo2, Ticket, FileCheck } from "lucide-react";
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { db } from "@/lib/db";
 import { getFinanceOverview } from "@/services/platform/finance.service";
 import { listIntegrationSettings } from "@/services/platform/integration-settings.service";
+import { getLiveOperationalCounts, getRecentActivityFeed } from "@/services/insights/executive-insight.service";
 import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 import { ROUTES } from "@/lib/constants/routes";
 import { PageHeader } from "@/components/dashboard/PageHeader";
@@ -23,18 +24,6 @@ function timeAgo(date: Date) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  SELLER_VERIFIED: "verified a seller",
-  SELLER_VERIFICATION_REJECTED: "rejected a seller verification",
-  PRODUCT_APPROVED: "approved a listing",
-  PRODUCT_REJECTED: "rejected a listing",
-  PRODUCT_REMOVED: "removed a listing",
-  PRODUCT_FEATURED: "featured a listing",
-  PRODUCT_UNFEATURED: "unfeatured a listing",
-  USER_STATUS_CHANGED: "changed a user's status",
-  USER_ROLE_CHANGED: "changed a user's role",
-};
-
 const SYSTEM_STATUS_TONE = { OPEN: "success", PAUSED: "warning", CLOSED: "danger" } as const;
 
 export default async function AdminCommandCenterPage() {
@@ -51,6 +40,7 @@ export default async function AdminCommandCenterPage() {
     recentOrders,
     systemSettings,
     integrations,
+    liveCounts,
   ] = await Promise.all([
     db.user.count(),
     db.sellerProfile.count({ where: { verificationStatus: "VERIFIED" } }),
@@ -58,10 +48,11 @@ export default async function AdminCommandCenterPage() {
     db.dispute.count({ where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } }),
     getFinanceOverview(),
     db.product.groupBy({ by: ["status"], _count: true }),
-    db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { actor: true } }),
+    getRecentActivityFeed(8),
     db.order.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: { buyer: true } }),
     db.systemSettings.findUnique({ where: { id: "singleton" } }),
     listIntegrationSettings(),
+    getLiveOperationalCounts(),
   ]);
 
   const productCounts = Object.fromEntries(productStatusRows.map((row) => [row.status, row._count]));
@@ -78,8 +69,8 @@ export default async function AdminCommandCenterPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Selecta HQ"
-        title="Command center"
-        description="A live snapshot of the marketplace — jump into whatever needs attention."
+        title="Executive Center"
+        description="A live snapshot across every center — jump into whatever needs attention."
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -91,7 +82,16 @@ export default async function AdminCommandCenterPage() {
         <StatCard label="System status" icon={Activity} value={marketplaceStatus} />
       </div>
 
-      {(pendingVerifications > 0 || finance.pendingWithdrawals.count > 0 || openDisputes > 0) && (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <StatCard label="Live orders" icon={Activity} value={liveCounts.liveOrders.toLocaleString()} />
+        <StatCard label="Active deliveries" icon={Truck} value={liveCounts.activeDeliveries.toLocaleString()} />
+        <StatCard label="Unassigned deliveries" icon={Truck} value={liveCounts.unassignedDeliveries.toLocaleString()} />
+        <StatCard label="Documents to review" icon={FileCheck} value={liveCounts.pendingDocuments.toLocaleString()} />
+        <StatCard label="Return requests" icon={Undo2} value={liveCounts.pendingReturns.toLocaleString()} />
+        <StatCard label="Open support tickets" icon={Ticket} value={liveCounts.openTickets.toLocaleString()} />
+      </div>
+
+      {(pendingVerifications > 0 || finance.pendingWithdrawals.count > 0 || openDisputes > 0 || liveCounts.unassignedDeliveries > 0 || liveCounts.pendingDocuments > 0 || liveCounts.pendingReturns > 0 || liveCounts.openTickets > 0) && (
         <Card className="border-accent/30 bg-accent/5">
           <CardHeader>
             <CardTitle>Pending admin tasks</CardTitle>
@@ -119,6 +119,38 @@ export default async function AdminCommandCenterPage() {
                 className="rounded-full border border-accent/30 bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
               >
                 {openDisputes} dispute{openDisputes === 1 ? "" : "s"} open
+              </Link>
+            )}
+            {liveCounts.unassignedDeliveries > 0 && (
+              <Link
+                href={ROUTES.admin.logisticsDispatch}
+                className="rounded-full border border-accent/30 bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {liveCounts.unassignedDeliveries} delivery{liveCounts.unassignedDeliveries === 1 ? "" : "ies"} awaiting dispatch
+              </Link>
+            )}
+            {liveCounts.pendingDocuments > 0 && (
+              <Link
+                href={ROUTES.admin.complianceDocuments}
+                className="rounded-full border border-accent/30 bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {liveCounts.pendingDocuments} document{liveCounts.pendingDocuments === 1 ? "" : "s"} to review
+              </Link>
+            )}
+            {liveCounts.pendingReturns > 0 && (
+              <Link
+                href={ROUTES.admin.returns}
+                className="rounded-full border border-accent/30 bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {liveCounts.pendingReturns} return{liveCounts.pendingReturns === 1 ? "" : "s"} to review
+              </Link>
+            )}
+            {liveCounts.openTickets > 0 && (
+              <Link
+                href={ROUTES.admin.supportTickets}
+                className="rounded-full border border-accent/30 bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {liveCounts.openTickets} support ticket{liveCounts.openTickets === 1 ? "" : "s"} open
               </Link>
             )}
           </CardContent>
@@ -152,15 +184,15 @@ export default async function AdminCommandCenterPage() {
               <p className="text-sm text-muted-foreground">Nothing&apos;s happened yet.</p>
             ) : (
               <ul className="flex flex-col gap-3">
-                {recentActivity.map((entry) => (
-                  <li key={entry.id} className="flex items-start justify-between gap-3 text-sm">
-                    <span className="text-secondary-foreground">
-                      <span className="font-medium">
-                        {entry.actor ? `${entry.actor.firstName} ${entry.actor.lastName}` : "System"}
-                      </span>{" "}
-                      <span className="text-muted-foreground">{ACTION_LABELS[entry.action] ?? entry.action.toLowerCase()}</span>
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{timeAgo(entry.createdAt)}</span>
+                {recentActivity.map((entry, index) => (
+                  <li key={index}>
+                    <Link href={entry.href} className="flex items-start justify-between gap-3 text-sm hover:underline">
+                      <span className="text-secondary-foreground">
+                        <span className="font-medium">{entry.actorLabel}</span>{" "}
+                        <span className="text-muted-foreground">{entry.label}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{timeAgo(entry.createdAt)}</span>
+                    </Link>
                   </li>
                 ))}
               </ul>

@@ -34,6 +34,12 @@ export interface WithdrawalRequestInput {
 export async function requestWithdrawal(userId: string, sellerId: string, input: WithdrawalRequestInput) {
   if (input.amount <= 0) throw new ValidationError("Withdrawal amount must be greater than zero");
 
+  const settings = await db.systemSettings.findUnique({ where: { id: "singleton" } });
+  const minAmount = Number(settings?.minWithdrawalAmount ?? 0);
+  const maxAmount = settings?.maxWithdrawalAmount != null ? Number(settings.maxWithdrawalAmount) : null;
+  if (input.amount < minAmount) throw new ValidationError(`The minimum withdrawal amount is ${formatNaira(minAmount)}`);
+  if (maxAmount !== null && input.amount > maxAmount) throw new ValidationError(`The maximum withdrawal amount is ${formatNaira(maxAmount)}`);
+
   const sellerProfile = await db.sellerProfile.findFirst({ where: { id: sellerId, userId } });
   if (!sellerProfile) throw new NotFoundError("Seller profile");
 

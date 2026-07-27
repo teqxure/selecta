@@ -4,6 +4,7 @@ import { notify } from "@/services/notifications/notify.service";
 import { releaseOrderTransactions } from "@/services/payments/payment.service";
 import { syncDeliveryStatus } from "@/services/logistics/delivery.service";
 import { transitionOrderStatus } from "@/services/orders/order-state-machine";
+import { recordCouponRedemption } from "@/services/marketing/coupon.service";
 import { NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors";
 import type { Address } from "@/types";
 import type { OrderStatus } from "@/generated/prisma/enums";
@@ -22,11 +23,17 @@ interface OrderLineInput {
  * the accepted-offer checkout flow in app/(buyer)/messages/actions.ts —
  * a known gap, not an oversight).
  */
+interface OrderDiscountInput {
+  couponId: string;
+  discountAmount: number;
+}
+
 export async function createOrder(
   buyerId: string,
   lines: OrderLineInput[],
   shippingAddress: Address,
   deliveryFee = 0,
+  discount?: OrderDiscountInput,
 ) {
   if (lines.length === 0) throw new ValidationError("An order must contain at least one item");
 
@@ -59,11 +66,16 @@ export async function createOrder(
       return sum + Number(unitPriceFor(line, product)) * line.quantity;
     }, 0);
 
+    // Capped so a stale/mis-scoped discount can never push totalAmount negative.
+    const discountAmount = discount ? Math.min(discount.discountAmount, itemsSubtotal) : 0;
+
     const created = await tx.order.create({
       data: {
         buyerId,
-        totalAmount: itemsSubtotal + deliveryFee,
+        totalAmount: itemsSubtotal + deliveryFee - discountAmount,
         deliveryFee,
+        discountAmount,
+        couponId: discount?.couponId,
         shippingAddress: shippingAddress as object,
         items: {
           create: lines.map((line) => {
@@ -81,6 +93,10 @@ export async function createOrder(
 
     for (const line of offerLines) {
       await tx.offer.update({ where: { id: line.offerId! }, data: { orderId: created.id } });
+    }
+
+    if (discount && discountAmount > 0) {
+      await recordCouponRedemption(tx, discount.couponId, buyerId, created.id, discountAmount);
     }
 
     return created;
@@ -116,7 +132,7 @@ export async function createOrder(
 
 const ORDER_DETAIL_INCLUDE = {
   buyer: true,
-  items: { include: { product: { include: { images: { orderBy: { position: "asc" as const }, take: 1 }, seller: true } } } },
+  items: { include: { product: { include: { images: { orderBy: { position: "asc" as const }, take: 1 }, seller: true } }, returnRequest: true } },
   payment: true,
   transactions: true,
   delivery: { include: { events: { orderBy: { createdAt: "asc" as const } } } },

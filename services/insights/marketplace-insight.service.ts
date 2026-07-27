@@ -197,3 +197,86 @@ export async function getProductQualityTrend(monthsBack = 6): Promise<ProductQua
     };
   });
 }
+
+export interface BuyerRetentionResult {
+  eligibleBuyers: number;
+  activeBuyers: number;
+  retentionRate: number;
+}
+
+/** Mirrors getSellerRetention on the buyer side — buyers who joined more than `days` ago and placed at least one order since. */
+export async function getBuyerRetention(days = 30): Promise<BuyerRetentionResult> {
+  const since = new Date(Date.now() - days * 86_400_000);
+
+  const eligibleBuyers = await db.user.findMany({
+    where: { role: "BUYER", createdAt: { lt: since } },
+    select: { id: true },
+  });
+  if (eligibleBuyers.length === 0) return { eligibleBuyers: 0, activeBuyers: 0, retentionRate: 0 };
+
+  const eligibleIds = eligibleBuyers.map((b) => b.id);
+  const activeBuyerIds = await db.order.findMany({
+    where: { buyerId: { in: eligibleIds }, createdAt: { gte: since } },
+    select: { buyerId: true },
+    distinct: ["buyerId"],
+  });
+
+  return {
+    eligibleBuyers: eligibleBuyers.length,
+    activeBuyers: activeBuyerIds.length,
+    retentionRate: activeBuyerIds.length / eligibleBuyers.length,
+  };
+}
+
+/** Share of buyers with more than one order, among buyers with at least one — the platform's repeat-purchase rate. */
+export async function getRepeatPurchaseRate(): Promise<{ buyersWithOrders: number; repeatBuyers: number; repeatRate: number }> {
+  const grouped = await db.order.groupBy({ by: ["buyerId"], _count: true });
+  const buyersWithOrders = grouped.length;
+  const repeatBuyers = grouped.filter((row) => row._count > 1).length;
+
+  return { buyersWithOrders, repeatBuyers, repeatRate: buyersWithOrders > 0 ? repeatBuyers / buyersWithOrders : 0 };
+}
+
+export interface CategoryGap {
+  categoryId: string;
+  categoryName: string;
+  demand: number;
+  supply: number;
+}
+
+/** Mirrors getLowInventoryAreas at the category level instead of city — recent VIEW/SAVE events vs active listing count per category. */
+export async function getInventoryGapsByCategory(days = 30, limit = 10): Promise<CategoryGap[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const [events, supplyRows] = await Promise.all([
+    db.productEvent.findMany({
+      where: { type: { in: ["VIEW", "SAVE"] }, createdAt: { gte: since } },
+      select: { product: { select: { categoryId: true } } },
+      take: 5000,
+      orderBy: { createdAt: "desc" },
+    }),
+    db.product.groupBy({ by: ["categoryId"], where: { status: "ACTIVE" }, _count: true }),
+  ]);
+
+  const demandByCategory = new Map<string, number>();
+  for (const event of events) {
+    demandByCategory.set(event.product.categoryId, (demandByCategory.get(event.product.categoryId) ?? 0) + 1);
+  }
+  const supplyByCategory = new Map(supplyRows.map((row) => [row.categoryId, row._count]));
+
+  const categoryIds = [...new Set([...demandByCategory.keys(), ...supplyByCategory.keys()])];
+  const categories = await db.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true } });
+  const nameById = new Map(categories.map((c) => [c.id, c.name]));
+
+  return Array.from(demandByCategory.entries())
+    .map(([categoryId, demand]) => ({
+      categoryId,
+      categoryName: nameById.get(categoryId) ?? "Unknown",
+      demand,
+      supply: supplyByCategory.get(categoryId) ?? 0,
+    }))
+    .filter((row) => row.supply < row.demand)
+    .sort((a, b) => b.demand / (b.supply + 1) - a.demand / (a.supply + 1))
+    .slice(0, limit);
+}

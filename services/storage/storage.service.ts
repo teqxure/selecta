@@ -8,6 +8,8 @@ import {
   MAX_UPLOAD_SIZE_BYTES,
   ALLOWED_VIDEO_CONTENT_TYPES,
   MAX_VIDEO_SIZE_BYTES,
+  ALLOWED_DOCUMENT_CONTENT_TYPES,
+  MAX_DOCUMENT_SIZE_BYTES,
 } from "@/lib/constants/storage";
 import { ConflictError, ValidationError } from "@/lib/errors";
 
@@ -39,6 +41,7 @@ const client = new S3Client({
 const UPLOAD_LIMITS = {
   image: { allowedTypes: ALLOWED_IMAGE_CONTENT_TYPES as readonly string[], maxSizeBytes: MAX_UPLOAD_SIZE_BYTES, ttlSeconds: 60 * 5 },
   video: { allowedTypes: ALLOWED_VIDEO_CONTENT_TYPES as readonly string[], maxSizeBytes: MAX_VIDEO_SIZE_BYTES, ttlSeconds: 60 * 15 },
+  document: { allowedTypes: ALLOWED_DOCUMENT_CONTENT_TYPES as readonly string[], maxSizeBytes: MAX_DOCUMENT_SIZE_BYTES, ttlSeconds: 60 * 10 },
 } as const;
 
 /**
@@ -54,7 +57,7 @@ const UPLOAD_LIMITS = {
  * check in the upload components (which a caller invoking this action
  * directly could otherwise skip entirely).
  */
-export async function createUploadUrl(folder: string, contentType: string, sizeBytes: number, kind: "image" | "video" = "image") {
+export async function createUploadUrl(folder: string, contentType: string, sizeBytes: number, kind: "image" | "video" | "document" = "image") {
   const limits = UPLOAD_LIMITS[kind];
 
   if (!limits.allowedTypes.includes(contentType)) {

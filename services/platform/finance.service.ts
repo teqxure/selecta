@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { releaseOrderTransactions } from "@/services/payments/payment.service";
 
 /**
  * Platform-wide financial snapshot for the Super Admin finance dashboard.
@@ -109,4 +110,66 @@ export async function getSellerPerformance(limit = 8) {
         commissionContributed: Number(row._sum.amount ?? 0),
       };
     });
+}
+
+/**
+ * The weekly-settlement cron's core: releases every HELD_IN_ESCROW
+ * transaction whose order has sat past `escrowHoldDays +
+ * settlementCoolingPeriodDays`, but only if `autoWeeklySettlement` is
+ * turned on — this is opt-in automation layered over the existing manual
+ * release path (releaseOrderTransactions), not a replacement for it.
+ */
+export async function releaseEligibleEscrowTransactions() {
+  const settings = await db.systemSettings.findUnique({ where: { id: "singleton" } });
+  if (!settings?.autoWeeklySettlement) {
+    return { enabled: false, ordersReleased: 0, transactionsReleased: 0 };
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (settings.escrowHoldDays + settings.settlementCoolingPeriodDays));
+
+  const eligibleOrderIds = await db.transaction.findMany({
+    where: { status: "HELD_IN_ESCROW", createdAt: { lte: cutoff } },
+    select: { orderId: true },
+    distinct: ["orderId"],
+  });
+
+  let transactionsReleased = 0;
+  for (const { orderId } of eligibleOrderIds) {
+    const released = await releaseOrderTransactions(orderId, null);
+    transactionsReleased += released.length;
+  }
+
+  return { enabled: true, ordersReleased: eligibleOrderIds.length, transactionsReleased };
+}
+
+/**
+ * Settlement report: RELEASED transactions grouped by seller for a period —
+ * admin-only view showing gross/commission/net side by side (the exact
+ * breakdown sellers themselves never see; see listLedgerEntriesForSeller).
+ */
+export async function getSettlementReport(range: { from: Date; to: Date }, limit = 100) {
+  const grouped = await db.transaction.groupBy({
+    by: ["sellerId"],
+    where: { status: "RELEASED", updatedAt: { gte: range.from, lte: range.to } },
+    _sum: { amount: true, commissionAmount: true, sellerAmount: true },
+    _count: true,
+    orderBy: { _sum: { sellerAmount: "desc" } },
+    take: limit,
+  });
+
+  const sellers = await db.sellerProfile.findMany({ where: { id: { in: grouped.map((r) => r.sellerId) } } });
+  const sellerById = new Map(sellers.map((seller) => [seller.id, seller]));
+
+  return grouped.map((row) => {
+    const seller = sellerById.get(row.sellerId);
+    return {
+      sellerId: row.sellerId,
+      label: seller?.storeName ?? seller?.businessName ?? "Unknown seller",
+      orderCount: row._count,
+      gross: Number(row._sum.amount ?? 0),
+      commission: Number(row._sum.commissionAmount ?? 0),
+      net: Number(row._sum.sellerAmount ?? 0),
+    };
+  });
 }

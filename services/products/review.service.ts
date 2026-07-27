@@ -99,9 +99,34 @@ async function recomputeSellerRating(sellerId: string) {
 
 export function listReviewsForProduct(productId: string) {
   return db.review.findMany({
-    where: { productId },
+    where: { productId, isHidden: false },
     include: { author: true },
     orderBy: { createdAt: "desc" },
+  });
+}
+
+/** HQ moderation queue — includes hidden reviews, unlike the public-facing listReviewsForProduct. */
+export function listReviewsForModeration(search?: string) {
+  return db.review.findMany({
+    where: search ? { product: { title: { contains: search, mode: "insensitive" } } } : {},
+    include: { author: true, product: true },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+}
+
+export async function setReviewHidden(adminId: string, reviewId: string, isHidden: boolean) {
+  return db.$transaction(async (tx) => {
+    const review = await tx.review.update({ where: { id: reviewId }, data: { isHidden } });
+    await tx.auditLog.create({
+      data: {
+        actorId: adminId,
+        action: isHidden ? "REVIEW_HIDDEN" : "REVIEW_UNHIDDEN",
+        entityType: "Review",
+        entityId: reviewId,
+      },
+    });
+    return review;
   });
 }
 

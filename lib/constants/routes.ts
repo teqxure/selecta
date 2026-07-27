@@ -18,6 +18,12 @@ export const ROUTES = {
   messages: "/messages",
   message: (id: string) => `/messages/${id}`,
   sellerAgreement: "/seller-agreement",
+  rider: {
+    root: "/rider",
+    dashboard: "/rider",
+    delivery: (id: string) => `/rider/deliveries/${id}`,
+    wallet: "/rider/wallet",
+  },
   seller: {
     root: "/seller",
     dashboard: "/seller",
@@ -34,6 +40,7 @@ export const ROUTES = {
     withdrawals: "/seller/withdrawals",
     settings: "/seller/settings",
     verification: "/seller/verification",
+    compliance: "/seller/compliance",
     customers: "/seller/customers",
     messages: "/seller/messages",
     message: (id: string) => `/seller/messages/${id}`,
@@ -81,8 +88,30 @@ export const ROUTES = {
     logisticsPartners: "/admin/logistics/partners",
     logisticsRules: "/admin/logistics/rules",
     logisticsHeatMap: "/admin/logistics/heat-map",
+    logisticsDispatch: "/admin/logistics/dispatch",
+    logisticsRiders: "/admin/logistics/riders",
+    rider: (id: string) => `/admin/logistics/riders/${id}`,
+    marketplaceCoupons: "/admin/marketplace/coupons",
+    marketplaceCollections: "/admin/marketplace/collections",
+    collection: (id: string) => `/admin/marketplace/collections/${id}`,
+    marketplaceCampaigns: "/admin/marketplace/campaigns",
+    marketplaceFeatured: "/admin/marketplace/featured",
+    complianceDocumentTypes: "/admin/compliance/document-types",
+    complianceDocuments: "/admin/compliance/documents",
+    financeAuditLog: "/admin/finance/audit-log",
+    financeSettlements: "/admin/finance/settlements",
+    returns: "/admin/returns",
+    return: (id: string) => `/admin/returns/${id}`,
+    supportTickets: "/admin/support-tickets",
+    supportTicket: (id: string) => `/admin/support-tickets/${id}`,
+    reviews: "/admin/reviews",
+    roles: "/admin/roles",
+    role: (id: string) => `/admin/roles/${id}`,
+    intelligence: "/admin/intelligence",
   },
   notifications: "/notifications",
+  support: "/support",
+  supportTicket: (id: string) => `/support/${id}`,
 } as const;
 
 /**
@@ -90,4 +119,4 @@ export const ROUTES = {
  * role. Checked in proxy.ts alongside the role-specific ROUTE_ROLE_ACCESS
  * table in lib/constants/roles.ts.
  */
-export const AUTH_REQUIRED_PREFIXES = ["/profile", "/orders", "/saved", "/cart", "/notifications", "/messages"] as const;
+export const AUTH_REQUIRED_PREFIXES = ["/profile", "/orders", "/saved", "/cart", "/notifications", "/messages", "/support"] as const;

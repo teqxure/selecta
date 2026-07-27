@@ -16,7 +16,7 @@ import type { OrderStatus } from "@/generated/prisma/enums";
  * cancelled" an actual guarantee instead of a convention someone can
  * forget to check.
  */
-export type OrderActorType = "SYSTEM" | "SELLER" | "BUYER" | "ADMIN";
+export type OrderActorType = "SYSTEM" | "SELLER" | "BUYER" | "ADMIN" | "RIDER";
 
 export interface OrderActor {
   type: OrderActorType;
@@ -74,6 +74,11 @@ const ACTOR_ALLOWED: Record<OrderActorType, Partial<Record<OrderStatus, OrderSta
     DELIVERED: ["COMPLETED", "DISPUTED"],
     COMPLETED: ["DISPUTED"],
   },
+  /** The rider actually holding the parcel confirming hand-off — same edge a seller could otherwise self-report. */
+  RIDER: {
+    READY_FOR_PICKUP: ["DELIVERED"],
+    IN_TRANSIT: ["DELIVERED"],
+  },
   ADMIN: FORWARD_TRANSITIONS,
 };
 
@@ -111,7 +116,7 @@ interface TransitionOptions {
 async function loadOrderForTransition(tx: Prisma.TransactionClient, orderId: string) {
   const order = await tx.order.findUnique({
     where: { id: orderId },
-    include: { items: { include: { product: { include: { seller: true } } } } },
+    include: { items: { include: { product: { include: { seller: true } } } }, delivery: true },
   });
   if (!order) throw new NotFoundError("Order");
   return order;
@@ -127,6 +132,9 @@ function assertActorMayAct(
   if (actor.type === "SELLER") {
     const ownsOrder = order.items.some((item) => item.product.seller.userId === actor.userId);
     if (!ownsOrder) throw new ForbiddenError("You don't have any items in this order");
+  }
+  if (actor.type === "RIDER") {
+    if (!actor.userId || order.delivery?.agentId !== actor.userId) throw new ForbiddenError("You aren't the assigned rider for this order");
   }
   if ((actor.type === "ADMIN") && !actor.userId) {
     throw new ForbiddenError();

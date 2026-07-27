@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/rbac";
 import { Role, UserStatus } from "@/lib/constants/roles";
 import { createAdminSchema, updateAdminPermissionsSchema } from "@/lib/validators/admin-management";
 import { createAdmin, updateAdminPermissions, setAdminStatus } from "@/services/admin/admin-management.service";
+import { assignStaffRoleToUser } from "@/services/platform/staff-role.service";
 import { getRequestMeta } from "@/lib/security/request-meta";
 import { formatZodError, isAppError, ValidationError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
@@ -51,6 +52,17 @@ export async function updateAdminPermissionsAction(formData: FormData) {
 
   const { ipAddress } = await getRequestMeta();
   await updateAdminPermissions(session.userId, targetAdminId, parsed.data.permissions, ipAddress);
+
+  revalidatePath(ROUTES.admin.adminDetail(targetAdminId));
+  revalidatePath(ROUTES.admin.admins);
+}
+
+export async function assignStaffRoleAction(formData: FormData) {
+  const session = await requireRole(Role.SUPER_ADMIN);
+  const targetAdminId = String(formData.get("adminId"));
+  const staffRoleId = String(formData.get("staffRoleId") || "") || null;
+
+  await assignStaffRoleToUser(session.userId, targetAdminId, staffRoleId);
 
   revalidatePath(ROUTES.admin.adminDetail(targetAdminId));
   revalidatePath(ROUTES.admin.admins);

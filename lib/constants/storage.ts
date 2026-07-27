@@ -15,3 +15,10 @@ export const ALLOWED_VIDEO_CONTENT_TYPES = ["video/mp4", "video/quicktime", "vid
 export const MAX_VIDEO_SIZE_BYTES = 30 * 1024 * 1024; // 30MB — a useful 15-25s phone clip
 
 export const MAX_VIDEO_SIZE_LABEL = "30MB";
+
+/** Compliance-document uploads (business registration, ID scans, etc.) — PDF or a photo of the document. */
+export const ALLOWED_DOCUMENT_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
+
+export const MAX_DOCUMENT_SIZE_BYTES = 15 * 1024 * 1024; // 15MB — comfortably covers a scanned multi-page PDF
+
+export const MAX_DOCUMENT_SIZE_LABEL = "15MB";

@@ -102,8 +102,19 @@ export function recordDeliveryFeeRevenue(tx: DbOrTx, input: LedgerEntryInput) {
   return record(tx, "DELIVERY_FEE_REVENUE", input);
 }
 
+/**
+ * Seller-facing history only — excludes COMMISSION_EARNED at the query
+ * level (not just at display) since sellers must never see the platform's
+ * cut broken out as a line item, only their own gross/net movements.
+ * Admin views needing the full picture (including commission) should query
+ * ledgerEntry directly rather than reuse this function.
+ */
 export function listLedgerEntriesForSeller(sellerId: string, take = 50) {
-  return db.ledgerEntry.findMany({ where: { sellerId }, orderBy: { createdAt: "desc" }, take });
+  return db.ledgerEntry.findMany({
+    where: { sellerId, type: { not: "COMMISSION_EARNED" } },
+    orderBy: { createdAt: "desc" },
+    take,
+  });
 }
 
 /** What a seller has actually paid the platform for subscriptions/boosts — lifetime, summed from the ledger, never a mutable counter. */

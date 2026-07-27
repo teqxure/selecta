@@ -2,7 +2,7 @@ import { Wallet as WalletIcon, Clock, TrendingUp, Banknote } from "lucide-react"
 import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { getSellerProfileByUserId } from "@/services/sellers/seller.service";
-import { getSellerBalances } from "@/services/payments/payment.service";
+import { getSellerBalances, listSettlementTimelineForSeller } from "@/services/payments/payment.service";
 import { listLedgerEntriesForSeller } from "@/services/finance/ledger.service";
 import { DEFAULT_CURRENCY } from "@/lib/constants/app";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -13,21 +13,30 @@ import { ROUTES } from "@/lib/constants/routes";
 import Link from "next/link";
 
 const LEDGER_ENTRY_LABELS: Record<string, string> = {
-  CUSTOMER_PAYMENT: "Order paid (held in escrow)",
-  COMMISSION_EARNED: "Platform commission",
-  VENDOR_CREDIT: "Released to available balance",
+  CUSTOMER_PAYMENT: "Order paid (pending settlement)",
+  VENDOR_CREDIT: "Moved to available settlement",
   WITHDRAWAL_REQUEST: "Withdrawal requested",
   WITHDRAWAL_PAID: "Withdrawal paid out",
   REFUND: "Refunded",
   ADJUSTMENT: "Balance adjustment",
 };
 
+const SETTLEMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Processing",
+  SUCCESSFUL: "Processing",
+  HELD_IN_ESCROW: "Pending settlement",
+  RELEASED: "Settled",
+  FAILED: "Failed",
+  REFUNDED: "Refunded",
+};
+
 export default async function SellerWalletPage() {
   const session = await requireRole(Role.SELLER);
   const profile = await getSellerProfileByUserId(session.userId);
-  const [balances, ledgerEntries] = await Promise.all([
+  const [balances, ledgerEntries, settlementTimeline] = await Promise.all([
     getSellerBalances(profile.id),
     listLedgerEntriesForSeller(profile.id, 20),
+    listSettlementTimelineForSeller(profile.id, 20),
   ]);
 
   const format = (value: number) =>
@@ -45,17 +54,42 @@ export default async function SellerWalletPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Available balance" icon={WalletIcon} value={format(balances.available)} />
-        <StatCard label="Held in escrow" icon={Clock} value={format(balances.held)} />
+        <StatCard label="Available settlement" icon={WalletIcon} value={format(balances.available)} />
+        <StatCard label="Pending settlement" icon={Clock} value={format(balances.held)} />
         <StatCard label="Withdrawn" icon={Banknote} value={format(balances.withdrawn)} />
-        <StatCard label="Total earned" icon={TrendingUp} value={format(balances.lifetime)} />
+        <StatCard label="Lifetime earnings" icon={TrendingUp} value={format(balances.lifetime)} />
       </div>
 
       <Card>
         <CardContent className="p-5 text-sm text-muted-foreground">
-          Funds held in escrow release to your available balance once a delivered order clears — either the buyer
-          confirms receipt or Selecta releases it manually. Request a withdrawal any time from your available
-          balance.
+          Funds in pending settlement move to available settlement once a delivered order clears — either the buyer
+          confirms receipt or Selecta releases it. Request a withdrawal any time from your available settlement.
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Settlement timeline</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {settlementTimeline.length === 0 && <p className="text-sm text-muted-foreground">No orders settled yet.</p>}
+          {settlementTimeline.map((entry) => (
+            <div key={entry.id} className="flex items-center justify-between border-b border-border pb-3 last:border-0 last:pb-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">Order #{entry.orderId.slice(-8)}</span>
+                  <Badge tone={entry.settlementStatus === "RELEASED" ? "success" : "neutral"}>
+                    {SETTLEMENT_STATUS_LABELS[entry.settlementStatus] ?? entry.settlementStatus}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Order status: {entry.orderStatus}</p>
+                <p className="text-xs text-muted-foreground">
+                  {entry.createdAt.toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-accent">{format(entry.sellerAmount)}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

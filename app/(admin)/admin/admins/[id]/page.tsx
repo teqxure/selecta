@@ -3,11 +3,12 @@ import { requireRole } from "@/lib/auth/rbac";
 import { Role } from "@/lib/constants/roles";
 import { db } from "@/lib/db";
 import { getAdminActivity } from "@/services/admin/admin-management.service";
+import { listStaffRoles } from "@/services/platform/staff-role.service";
 import { PermissionCheckboxes } from "@/components/admin/PermissionCheckboxes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { updateAdminPermissionsAction, disableAdminAction, reinstateAdminAction } from "../actions";
+import { updateAdminPermissionsAction, assignStaffRoleAction, disableAdminAction, reinstateAdminAction } from "../actions";
 
 export default async function AdminDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireRole(Role.SUPER_ADMIN);
@@ -16,7 +17,7 @@ export default async function AdminDetailPage({ params }: { params: Promise<{ id
   const admin = await db.user.findUnique({ where: { id } });
   if (!admin || admin.role !== Role.ADMIN) notFound();
 
-  const activity = await getAdminActivity(admin.id);
+  const [activity, staffRoles] = await Promise.all([getAdminActivity(admin.id), listStaffRoles()]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -32,7 +33,39 @@ export default async function AdminDetailPage({ params }: { params: Promise<{ id
 
       <Card>
         <CardHeader>
-          <CardTitle>Permissions</CardTitle>
+          <CardTitle>Staff role</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={assignStaffRoleAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="adminId" value={admin.id} />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="staffRoleId" className="text-sm font-medium text-foreground">
+                Assigned role
+              </label>
+              <select
+                id="staffRoleId"
+                name="staffRoleId"
+                defaultValue={admin.staffRoleId ?? ""}
+                className="h-11 w-56 rounded-lg border border-border bg-background px-4 text-sm text-foreground"
+              >
+                <option value="">No role — individual permissions only</option>
+                {staffRoles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit" variant="secondary">
+              Save role
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Individually-granted permissions</CardTitle>
         </CardHeader>
         <CardContent>
           <form action={updateAdminPermissionsAction} className="flex flex-col gap-4">

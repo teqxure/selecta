@@ -1,5 +1,6 @@
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "../generated/prisma/client";
+import { ADMIN_PERMISSIONS } from "../lib/constants/permissions";
 
 /**
  * Idempotent (upsert by slug) — safe to re-run. Seeds the marketplace's
@@ -64,6 +65,112 @@ const CITY_ZONE_A_OVERRIDES: { city: string; price: number }[] = [
   { city: "Kano", price: 450 },
 ];
 
+/**
+ * The Selecta HQ Permission Engine's seeded default roles — all still
+ * fully editable (`isSystemDefined: true` just protects against
+ * accidental cleanup, not against changes). "Founder" exists here too
+ * despite SUPER_ADMIN being the true un-revocable root account — this is
+ * for a co-founder-style ADMIN who needs near-total but still revocable
+ * access, distinct from the one true SUPER_ADMIN.
+ */
+const STAFF_ROLES: { name: string; description: string; permissions: string[] }[] = [
+  {
+    name: "Founder",
+    description: "Full operational visibility and control across every center.",
+    permissions: [...ADMIN_PERMISSIONS],
+  },
+  {
+    name: "Chief Operations Officer",
+    description: "Cross-functional operational oversight.",
+    permissions: [
+      "users.manage", "vendors.manage", "vendors.verify", "products.moderate", "orders.manage",
+      "disputes.handle", "reports.view", "content.manage", "payouts.manage", "support.messages",
+      "MANAGE_LOGISTICS", "ASSIGN_RIDERS", "VIEW_ANALYTICS", "VIEW_FINANCE", "MANAGE_PRODUCTS",
+      "APPROVE_REFUNDS", "VERIFY_DOCUMENTS",
+    ],
+  },
+  {
+    name: "Finance Manager",
+    description: "Full Finance Center access, including payment provider config.",
+    permissions: ["VIEW_FINANCE", "VIEW_ESCROW", "payouts.manage", "reports.view", "MANAGE_PAYMENT_PROVIDERS"],
+  },
+  {
+    name: "Finance Officer",
+    description: "Finance Center visibility without payout/provider control.",
+    permissions: ["VIEW_FINANCE", "VIEW_ESCROW", "reports.view"],
+  },
+  {
+    name: "Compliance Manager",
+    description: "Full Compliance Center + seller verification authority.",
+    permissions: ["VERIFY_DOCUMENTS", "vendors.verify", "vendors.manage"],
+  },
+  {
+    name: "Compliance Officer",
+    description: "Reviews document/verification submissions.",
+    permissions: ["VERIFY_DOCUMENTS", "vendors.verify"],
+  },
+  {
+    name: "Marketplace Manager",
+    description: "Products, categories, coupons, collections & campaigns.",
+    permissions: ["MANAGE_PRODUCTS", "products.moderate", "content.manage", "CREATE_PROMOTIONS", "vendors.manage"],
+  },
+  {
+    name: "Customer Support Manager",
+    description: "Full support/dispute/refund authority.",
+    permissions: ["support.messages", "disputes.handle", "APPROVE_REFUNDS", "orders.manage"],
+  },
+  {
+    name: "Customer Support Agent",
+    description: "Handles support conversations and disputes.",
+    permissions: ["support.messages", "disputes.handle"],
+  },
+  {
+    name: "Logistics Manager",
+    description: "Full Logistics Operations Center authority.",
+    permissions: ["MANAGE_LOGISTICS", "ASSIGN_RIDERS", "orders.manage"],
+  },
+  {
+    name: "Dispatcher",
+    description: "Assigns/reassigns riders in the Dispatch Center.",
+    permissions: ["ASSIGN_RIDERS"],
+  },
+  {
+    name: "Marketing Manager",
+    description: "Full marketing-primitive authority.",
+    permissions: ["CREATE_PROMOTIONS", "MANAGE_PRODUCTS", "content.manage"],
+  },
+  {
+    name: "Marketing Officer",
+    description: "Creates coupons, collections & campaigns.",
+    permissions: ["CREATE_PROMOTIONS"],
+  },
+  {
+    name: "Data Analyst",
+    description: "Intelligence Center + platform reports.",
+    permissions: ["VIEW_ANALYTICS", "reports.view"],
+  },
+  {
+    name: "Operations Analyst",
+    description: "Analytics plus order visibility.",
+    permissions: ["VIEW_ANALYTICS", "reports.view", "orders.manage"],
+  },
+  {
+    name: "Developer",
+    description: "Platform settings & integrations.",
+    permissions: ["EDIT_PLATFORM_SETTINGS", "MANAGE_PAYMENT_PROVIDERS", "VIEW_ANALYTICS"],
+  },
+  {
+    name: "Product Manager",
+    description: "Product catalog & analytics.",
+    permissions: ["MANAGE_PRODUCTS", "content.manage", "VIEW_ANALYTICS"],
+  },
+  {
+    name: "Read Only Auditor",
+    description: "Read-only visibility — no mutation permissions.",
+    permissions: ["reports.view", "VIEW_FINANCE", "VIEW_ESCROW", "VIEW_ANALYTICS"],
+  },
+];
+
 async function main() {
   const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
   const prisma = new PrismaClient({ adapter });
@@ -112,6 +219,29 @@ async function main() {
   }
 
   console.log(`Seeded ${CATEGORY_TREE.length} main categories.`);
+
+  for (const role of STAFF_ROLES) {
+    const slug = role.name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
+    const existing = await prisma.staffRole.findUnique({ where: { name: role.name } });
+    if (existing) continue; // idempotent — don't clobber permissions an admin may have already customized
+
+    await prisma.staffRole.create({
+      data: {
+        name: role.name,
+        slug,
+        description: role.description,
+        isSystemDefined: true,
+        permissions: { create: role.permissions.map((permission) => ({ permission })) },
+      },
+    });
+  }
+
+  console.log(`Seeded ${STAFF_ROLES.length} default staff roles.`);
   await prisma.$disconnect();
 }
 

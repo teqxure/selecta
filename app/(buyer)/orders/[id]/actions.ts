@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/auth/rbac";
 import { confirmDeliveryAsBuyer, getOrderDetailForBuyer } from "@/services/orders/order.service";
 import { fileDispute } from "@/services/disputes/dispute.service";
 import { createReview } from "@/services/products/review.service";
+import { createReturnRequest } from "@/services/returns/return.service";
 import { getOrCreateConversation } from "@/services/messaging/conversation.service";
 import { isAppError } from "@/lib/errors";
 import { ROUTES } from "@/lib/constants/routes";
@@ -67,6 +68,28 @@ export async function createReviewAction(orderId: string, _prevState: CreateRevi
       rating: Number(formData.get("rating")),
       comment: String(formData.get("comment") || "").trim() || undefined,
     });
+  } catch (error) {
+    if (isAppError(error)) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(ROUTES.order(orderId));
+  return {};
+}
+
+export interface RequestReturnState {
+  error?: string;
+}
+
+export async function requestReturnAction(orderId: string, _prevState: RequestReturnState, formData: FormData): Promise<RequestReturnState> {
+  const session = await requireAuth();
+
+  try {
+    await createReturnRequest(
+      session.userId,
+      String(formData.get("orderItemId")),
+      String(formData.get("reason") || "").trim(),
+    );
   } catch (error) {
     if (isAppError(error)) return { error: error.message };
     throw error;

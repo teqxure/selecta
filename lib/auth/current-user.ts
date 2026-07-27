@@ -29,7 +29,14 @@ export const currentUser = cache(async () => {
 
   const user = await db.user.findUnique({
     where: { id: session.userId },
-    include: { sellerProfile: true },
+    include: {
+      sellerProfile: true,
+      // Only meaningful for ADMIN-role users — see lib/auth/permissions.ts.
+      // Included here (not a separate query) so every requirePermission/
+      // requireRole call site gets the resolved Permission Engine role for
+      // free, without touching any of those call sites.
+      staffRole: { include: { permissions: true } },
+    },
   });
   if (!user) return null;
 

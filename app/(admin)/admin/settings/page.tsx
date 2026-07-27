@@ -76,6 +76,58 @@ export default async function AdminSettingsPage() {
               ))}
             </div>
 
+            <div className="flex flex-col gap-4 rounded-xl border border-border p-4">
+              <p className="text-sm font-medium text-foreground">Settlement</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  name="escrowHoldDays"
+                  type="number"
+                  label="Escrow hold days"
+                  helperText="Days before an escrowed order is eligible for settlement."
+                  defaultValue={settings.escrowHoldDays}
+                  required
+                />
+                <Input
+                  name="settlementCoolingPeriodDays"
+                  type="number"
+                  label="Settlement cooling period (days)"
+                  helperText="Extra buffer after the hold period before payout."
+                  defaultValue={settings.settlementCoolingPeriodDays}
+                  required
+                />
+                <Input
+                  name="minWithdrawalAmount"
+                  type="number"
+                  step="0.01"
+                  label="Minimum withdrawal amount"
+                  defaultValue={Number(settings.minWithdrawalAmount)}
+                  required
+                />
+                <Input
+                  name="maxWithdrawalAmount"
+                  type="number"
+                  step="0.01"
+                  label="Maximum withdrawal amount"
+                  helperText="Leave blank for no cap."
+                  defaultValue={settings.maxWithdrawalAmount != null ? Number(settings.maxWithdrawalAmount) : ""}
+                />
+              </div>
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  name="autoWeeklySettlement"
+                  defaultChecked={settings.autoWeeklySettlement}
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-[color:var(--color-burnt-orange)]"
+                />
+                <span>
+                  <span className="font-medium text-foreground">Auto weekly settlement</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Automatically release eligible escrowed transactions once a week, past the hold + cooling period.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <Button type="submit" variant="accent" className="self-start">
               Save settings
             </Button>

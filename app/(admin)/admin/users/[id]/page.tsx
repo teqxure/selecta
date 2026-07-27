@@ -119,7 +119,7 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
         <Card>
           <CardHeader>
             <CardTitle>Role</CardTitle>
-            <CardDescription>Changing this can grant or remove Super Admin itself — see the Users list for the full rules.</CardDescription>
+            <CardDescription>Changing this can grant or remove Founder access itself — see the Users list for the full rules.</CardDescription>
           </CardHeader>
           <CardContent>
             <form action={changeUserRoleAction} className="flex items-center gap-2">

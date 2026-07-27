@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3, Rocket, Megaphone, ShieldCheck, LogOut } from "lucide-react";
+import { LayoutGrid, Package, ShoppingCart, Wallet, Store, Users, MessageCircle, BarChart3, Rocket, Megaphone, ShieldCheck, FileCheck, LogOut } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { Logo } from "@/components/ui/Logo";
 import { Footer } from "@/components/layout/Footer";
@@ -37,6 +37,7 @@ const SELLER_NAV_GROUPS: DashboardNavGroup[] = [
     items: [
       { label: "Store settings", href: ROUTES.seller.settings, icon: <Store {...iconProps} /> },
       { label: "Verification", href: ROUTES.seller.verification, icon: <ShieldCheck {...iconProps} /> },
+      { label: "Compliance", href: ROUTES.seller.compliance, icon: <FileCheck {...iconProps} /> },
     ],
   },
 ];

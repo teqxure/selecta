@@ -15,6 +15,21 @@ export const ADMIN_PERMISSIONS = [
   "content.manage",
   "payouts.manage",
   "support.messages",
+  // Selecta HQ Permission Engine additions — new UPPER_SNAKE style for
+  // genuinely new capabilities added in this phase; the dot-notation
+  // strings above are untouched (renaming them would break every existing
+  // grant already stored in User.permissions).
+  "VIEW_FINANCE",
+  "MANAGE_PRODUCTS",
+  "VERIFY_DOCUMENTS",
+  "APPROVE_REFUNDS",
+  "ASSIGN_RIDERS",
+  "MANAGE_LOGISTICS",
+  "VIEW_ANALYTICS",
+  "EDIT_PLATFORM_SETTINGS",
+  "CREATE_PROMOTIONS",
+  "VIEW_ESCROW",
+  "MANAGE_PAYMENT_PROVIDERS",
 ] as const;
 
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
@@ -30,6 +45,17 @@ export const ADMIN_PERMISSION_LABELS: Record<AdminPermission, string> = {
   "content.manage": "Manage categories & platform content",
   "payouts.manage": "Review and approve seller withdrawal requests",
   "support.messages": "View buyer/seller conversations for support and trust review",
+  VIEW_FINANCE: "View Finance Center (escrow, settlements, revenue reports)",
+  MANAGE_PRODUCTS: "Manage products, categories, coupons, collections & campaigns",
+  VERIFY_DOCUMENTS: "Review Compliance Center document submissions",
+  APPROVE_REFUNDS: "Approve/reject returns and refund outcomes",
+  ASSIGN_RIDERS: "Assign/reassign riders in the Dispatch Center",
+  MANAGE_LOGISTICS: "Manage delivery zones, pricing, partners & rules",
+  VIEW_ANALYTICS: "View Intelligence Center analytics",
+  EDIT_PLATFORM_SETTINGS: "Edit System Settings",
+  CREATE_PROMOTIONS: "Create coupons, collections & marketing campaigns",
+  VIEW_ESCROW: "View escrow balances and ledger detail",
+  MANAGE_PAYMENT_PROVIDERS: "Manage payment provider integrations",
 };
 
 /**

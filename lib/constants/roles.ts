@@ -9,8 +9,12 @@ export const ROLE_LABELS: Record<Role, string> = {
   BUYER: "Buyer",
   SELLER: "Seller",
   AGENT: "Delivery Agent",
+  RIDER: "Rider",
   ADMIN: "Admin",
-  SUPER_ADMIN: "Super Admin",
+  /// Selecta HQ rebrand: the account is still `SUPER_ADMIN` underneath
+  /// (unchanged auth semantics — see lib/auth/permissions.ts) — only the
+  /// display label changes.
+  SUPER_ADMIN: "Founder",
 };
 
 /** "INACTIVE" is the DB enum value; shown to admins as "Deactivated" — the lifecycle state a Super Admin sets deliberately, distinct from a user simply going quiet. */
@@ -28,6 +32,7 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
  */
 export const ROUTE_ROLE_ACCESS: Record<string, Role[]> = {
   "/seller": [Role.SELLER, Role.ADMIN, Role.SUPER_ADMIN],
+  "/rider": [Role.RIDER, Role.ADMIN, Role.SUPER_ADMIN],
   "/admin": [Role.ADMIN, Role.SUPER_ADMIN],
 };
 
@@ -39,6 +44,7 @@ export const ROLE_HOME_ROUTE: Record<Role, string> = {
   BUYER: ROUTES.home,
   SELLER: ROUTES.seller.dashboard,
   AGENT: ROUTES.home,
+  RIDER: ROUTES.rider.dashboard,
   ADMIN: ROUTES.admin.root,
   SUPER_ADMIN: ROUTES.admin.root,
 };

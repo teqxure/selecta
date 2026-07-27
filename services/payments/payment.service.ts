@@ -83,6 +83,15 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
   ]);
   if (items.length === 0) throw new NotFoundError("Order items");
 
+  // A coupon discount is shared proportionally between platform commission
+  // and seller payout, in the same ratio as their existing split — never
+  // absorbed silently by one side. This also keeps the ledger invariant
+  // intact: sum(gross across sellers) + deliveryFee must equal
+  // Payment.amount (= order.totalAmount, already net of the discount).
+  const itemsSubtotal = items.reduce((sum, item) => sum + Number(item.unitPrice) * item.quantity, 0);
+  const discountAmount = Number(order.discountAmount ?? 0);
+  const discountRatio = itemsSubtotal > 0 ? discountAmount / itemsSubtotal : 0;
+
   const bySeller = new Map<
     string,
     { userId: string; productIds: string[]; gross: number; commission: number; sellerAmount: number }
@@ -97,7 +106,7 @@ export async function confirmPaymentSuccess(paymentId: string, providerReference
     }
     const rate = rateCache.get(categoryId)!;
 
-    const lineTotal = Number(item.unitPrice) * item.quantity;
+    const lineTotal = Number(item.unitPrice) * item.quantity * (1 - discountRatio);
     const lineCommission = (lineTotal * rate) / 100;
 
     const entry = bySeller.get(item.product.sellerId) ?? {
@@ -409,4 +418,37 @@ export async function getSellerBalances(sellerId: string) {
     withdrawn: Number(wallet?.withdrawnBalance ?? 0),
     lifetime: Number(wallet?.totalEarned ?? 0),
   };
+}
+
+/**
+ * Per-order settlement history for a seller's wallet — deliberately
+ * selects only `sellerAmount` (their net cut), never `amount` or
+ * `commissionAmount`, so a seller can't back into the platform's
+ * commission by subtracting gross from net on the same row.
+ */
+export async function listSettlementTimelineForSeller(sellerId: string, take = 20) {
+  const transactions = await db.transaction.findMany({
+    where: { sellerId },
+    orderBy: { createdAt: "desc" },
+    take,
+    select: {
+      id: true,
+      orderId: true,
+      sellerAmount: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      order: { select: { status: true } },
+    },
+  });
+
+  return transactions.map((t) => ({
+    id: t.id,
+    orderId: t.orderId,
+    sellerAmount: Number(t.sellerAmount),
+    settlementStatus: t.status,
+    orderStatus: t.order.status,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  }));
 }

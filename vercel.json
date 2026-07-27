@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/seller-reports",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-settlement",
+      "schedule": "0 4 * * 1"
     }
   ]
 }

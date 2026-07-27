@@ -56,7 +56,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
         title={`Users (${totalCount})`}
         description={
           canManageRoles
-            ? "As Super Admin, you can change any account's role here, including granting or removing Super Admin itself. You can't change your own role from this page, and the last active Super Admin can't be demoted."
+            ? "As the Founder, you can change any account's role here, including granting or removing Founder access itself. You can't change your own role from this page, and the last active Founder account can't be demoted."
             : undefined
         }
       />

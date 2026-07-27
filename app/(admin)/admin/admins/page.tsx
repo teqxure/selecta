@@ -20,8 +20,8 @@ export default async function AdminAdminsPage() {
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selecta HQ</p>
         <h1 className="font-display text-2xl font-semibold text-foreground">Admin management</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Only Super Admin can create admin accounts or change what they can access. Every admin only sees the pages
-          their granted permissions unlock.
+          Only the Founder can create admin accounts or change what they can access. Every admin only sees the pages
+          their granted permissions or staff role unlock.
         </p>
       </div>
 

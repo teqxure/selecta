@@ -340,6 +340,23 @@ export function removeProduct(productId: string, adminId: string, reason?: strin
   return moderateProduct(productId, adminId, { status: "REMOVED", rejectionReason: reason }, "PRODUCT_REMOVED");
 }
 
+export function listFeaturedProducts() {
+  return db.product.findMany({
+    where: { isFeatured: true },
+    include: { images: { orderBy: { position: "asc" }, take: 1 }, seller: { include: { user: true } } },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
+/** Active products matching a search term — shared by the "add to featured" and "add to collection" pickers. */
+export function searchActiveProducts(search: string, take = 10) {
+  return db.product.findMany({
+    where: { status: "ACTIVE", title: { contains: search, mode: "insensitive" } },
+    include: { images: { orderBy: { position: "asc" }, take: 1 } },
+    take,
+  });
+}
+
 export async function setProductFeatured(productId: string, adminId: string, featured: boolean) {
   return db.$transaction(async (tx) => {
     const product = await tx.product.update({ where: { id: productId }, data: { isFeatured: featured } });

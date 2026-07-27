@@ -23,11 +23,13 @@ const ROLE_COPY: Record<(typeof PUBLIC_REGISTER_ROLES)[number], { label: string;
 
 interface RegisterFormProps {
   googleEnabled: boolean;
+  /** Preselects the role radio — e.g. "RIDER" when reached via the riders subdomain. */
+  defaultRole?: (typeof PUBLIC_REGISTER_ROLES)[number];
 }
 
-export function RegisterForm({ googleEnabled }: RegisterFormProps) {
+export function RegisterForm({ googleEnabled, defaultRole }: RegisterFormProps) {
   const [state, formAction] = useActionState(registerAction, initialState);
-  const [role, setRole] = useState<(typeof PUBLIC_REGISTER_ROLES)[number]>("BUYER");
+  const [role, setRole] = useState<(typeof PUBLIC_REGISTER_ROLES)[number]>(defaultRole ?? "BUYER");
 
   return (
     <Card>

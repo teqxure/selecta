@@ -14,6 +14,9 @@ function matchPrefix(pathname: string, prefixes: readonly string[]) {
 /** Still served as-is even on the admin subdomain — the login/register forms, which aren't under `/admin`. (API routes and Next's own build assets never reach here — see `config.matcher` below.) */
 const ADMIN_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register"];
 
+/** Same idea, for the rider subdomain — the login/register forms aren't under `/rider` either. */
+const RIDER_HOST_PASSTHROUGH_PREFIXES = ["/login", "/register"];
+
 /** A request for an actual file — `/Selecta.png`, `/icon.png`, `/robots.txt` — never a page route, so it must never get an `/admin` prefix stuck on it. */
 const FILE_EXTENSION_PATTERN = /\.[a-zA-Z0-9]+$/;
 
@@ -43,6 +46,21 @@ function rewriteForAdminHost(request: NextRequest): string {
   return pathname === "/" ? "/admin" : `/admin${pathname}`;
 }
 
+/** Same idea as rewriteForAdminHost, fronting `/rider` instead of `/admin` on NEXT_PUBLIC_RIDER_HOST. */
+function rewriteForRiderHost(request: NextRequest): string {
+  const pathname = request.nextUrl.pathname;
+  if (!env.NEXT_PUBLIC_RIDER_HOST) return pathname;
+
+  const host = request.headers.get("host") ?? "";
+  const isRiderHost = host === env.NEXT_PUBLIC_RIDER_HOST || host.startsWith(`${env.NEXT_PUBLIC_RIDER_HOST}:`);
+  if (!isRiderHost) return pathname;
+  if (pathname.startsWith("/rider")) return pathname;
+  if (matchPrefix(pathname, RIDER_HOST_PASSTHROUGH_PREFIXES)) return pathname;
+  if (FILE_EXTENSION_PATTERN.test(pathname)) return pathname;
+
+  return pathname === "/" ? "/rider" : `/rider${pathname}`;
+}
+
 /**
  * Once the admin subdomain is configured, `/admin` on the main domain is
  * no longer a valid way in — this redirects it to the equivalent path on
@@ -67,6 +85,23 @@ function redirectAwayFromMainDomainAdminPath(request: NextRequest): URL | null {
   return target;
 }
 
+/** Same idea as redirectAwayFromMainDomainAdminPath, for `/rider` once NEXT_PUBLIC_RIDER_HOST is configured. */
+function redirectAwayFromMainDomainRiderPath(request: NextRequest): URL | null {
+  if (!env.NEXT_PUBLIC_RIDER_HOST) return null;
+
+  const host = request.headers.get("host") ?? "";
+  const isRiderHost = host === env.NEXT_PUBLIC_RIDER_HOST || host.startsWith(`${env.NEXT_PUBLIC_RIDER_HOST}:`);
+  if (isRiderHost) return null;
+
+  const pathname = request.nextUrl.pathname;
+  if (pathname !== "/rider" && !pathname.startsWith("/rider/")) return null;
+
+  const rest = pathname.slice("/rider".length); // "" or "/wallet" etc.
+  const target = new URL(`https://${env.NEXT_PUBLIC_RIDER_HOST}${rest || "/"}`);
+  target.search = request.nextUrl.search;
+  return target;
+}
+
 /**
  * Optimistic, cookie-only auth check. Proxy runs before every matched
  * request and must stay fast — no database calls here (see Next.js Proxy
@@ -77,8 +112,17 @@ export async function proxy(request: NextRequest) {
   const adminPathRedirect = redirectAwayFromMainDomainAdminPath(request);
   if (adminPathRedirect) return NextResponse.redirect(adminPathRedirect, 308);
 
-  const rewrittenPathname = rewriteForAdminHost(request);
-  const isRewritten = rewrittenPathname !== request.nextUrl.pathname;
+  const riderPathRedirect = redirectAwayFromMainDomainRiderPath(request);
+  if (riderPathRedirect) return NextResponse.redirect(riderPathRedirect, 308);
+
+  // Only one of these two can ever actually rewrite for a given request —
+  // each checks its own host and no-ops (returns the original pathname)
+  // unmodified when the request isn't for its subdomain.
+  const originalPathname = request.nextUrl.pathname;
+  const adminRewrite = rewriteForAdminHost(request);
+  const riderRewrite = rewriteForRiderHost(request);
+  const rewrittenPathname = adminRewrite !== originalPathname ? adminRewrite : riderRewrite;
+  const isRewritten = rewrittenPathname !== originalPathname;
 
   const response = isRewritten
     ? NextResponse.rewrite(new URL(`${rewrittenPathname}${request.nextUrl.search}`, request.url))

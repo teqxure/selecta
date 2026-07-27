@@ -59,6 +59,14 @@ const envSchema = z.object({
    */
   NEXT_PUBLIC_ADMIN_HOST: z.string().min(1).optional(),
   /**
+   * Same idea as NEXT_PUBLIC_ADMIN_HOST, but fronting the `/rider` route
+   * group instead — e.g. "riders.selectapick.store". Deliberately a
+   * different subdomain than the literal `/rider` path segment (plural
+   * "riders") to avoid a naming clash with an unrelated pre-existing
+   * Vercel domain assignment.
+   */
+  NEXT_PUBLIC_RIDER_HOST: z.string().min(1).optional(),
+  /**
    * Cookie `Domain` attribute (e.g. ".selectapick.store") that lets the
    * session cookie set on the main site also be sent to the admin
    * subdomain, so logging in once works across both. Left unset in local

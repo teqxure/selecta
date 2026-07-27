@@ -85,23 +85,6 @@ function redirectAwayFromMainDomainAdminPath(request: NextRequest): URL | null {
   return target;
 }
 
-/** Same idea as redirectAwayFromMainDomainAdminPath, for `/rider` once NEXT_PUBLIC_RIDER_HOST is configured. */
-function redirectAwayFromMainDomainRiderPath(request: NextRequest): URL | null {
-  if (!env.NEXT_PUBLIC_RIDER_HOST) return null;
-
-  const host = request.headers.get("host") ?? "";
-  const isRiderHost = host === env.NEXT_PUBLIC_RIDER_HOST || host.startsWith(`${env.NEXT_PUBLIC_RIDER_HOST}:`);
-  if (isRiderHost) return null;
-
-  const pathname = request.nextUrl.pathname;
-  if (pathname !== "/rider" && !pathname.startsWith("/rider/")) return null;
-
-  const rest = pathname.slice("/rider".length); // "" or "/wallet" etc.
-  const target = new URL(`https://${env.NEXT_PUBLIC_RIDER_HOST}${rest || "/"}`);
-  target.search = request.nextUrl.search;
-  return target;
-}
-
 /**
  * Optimistic, cookie-only auth check. Proxy runs before every matched
  * request and must stay fast — no database calls here (see Next.js Proxy
@@ -112,8 +95,9 @@ export async function proxy(request: NextRequest) {
   const adminPathRedirect = redirectAwayFromMainDomainAdminPath(request);
   if (adminPathRedirect) return NextResponse.redirect(adminPathRedirect, 308);
 
-  const riderPathRedirect = redirectAwayFromMainDomainRiderPath(request);
-  if (riderPathRedirect) return NextResponse.redirect(riderPathRedirect, 308);
+  // Unlike /admin, /rider deliberately stays reachable on the main domain
+  // too — no forced redirect to the riders subdomain. Both are valid front
+  // doors onto the same route group.
 
   // Only one of these two can ever actually rewrite for a given request —
   // each checks its own host and no-ops (returns the original pathname)

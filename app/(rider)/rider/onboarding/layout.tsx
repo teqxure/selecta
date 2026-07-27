@@ -13,7 +13,14 @@ export default async function RiderOnboardingLayout({ children }: { children: Re
   if (session.role !== Role.RIDER) redirect(ROLE_HOME_ROUTE[session.role]);
 
   const profile = await getRiderProfileByUserId(session.userId);
-  if (profile.onboardingCompletedAt) redirect(ROUTES.rider.dashboard);
+  // Onboarding is "complete" the moment verification is first submitted
+  // (same soft-gate as sellers) — but a REJECTED rider must still be able
+  // to come back through this wizard to resubmit, via the dashboard
+  // banner's "Resubmit" link, or they'd be bounced straight back to the
+  // dashboard by this same redirect.
+  if (profile.onboardingCompletedAt && profile.verificationStatus !== "REJECTED") {
+    redirect(ROUTES.rider.dashboard);
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-8 py-4">

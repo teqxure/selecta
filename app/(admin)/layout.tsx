@@ -41,6 +41,7 @@ import {
   Ticket,
   Radar,
   KeyRound,
+  Bot,
 } from "lucide-react";
 import { DashboardSidebar, type DashboardNavGroup } from "@/components/layout/DashboardSidebar";
 import { ROUTES } from "@/lib/constants/routes";
@@ -138,6 +139,7 @@ const ADMIN_NAV_GROUPS = [
     label: "Platform",
     items: [
       { label: "Integrations", href: ROUTES.admin.integrations, icon: Plug, permission: "SUPER_ADMIN_ONLY" },
+      { label: "AI Assistant", href: ROUTES.admin.aiAssistant, icon: Bot, permission: "SUPER_ADMIN_ONLY" },
       { label: "Notifications", href: ROUTES.admin.notifications, icon: Bell, permission: "SUPER_ADMIN_ONLY" },
       { label: "Feature flags", href: ROUTES.admin.featureFlags, icon: Flag, permission: "SUPER_ADMIN_ONLY" },
       { label: "Settings", href: ROUTES.admin.settings, icon: Settings, permission: "SUPER_ADMIN_ONLY" },

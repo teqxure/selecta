@@ -317,6 +317,8 @@ model User {
   integrationSettingsSet     IntegrationSetting[]
   commissionRulesCreated     CommissionRule[]
   featureFlagsUpdated        FeatureFlag[]
+  aiConversations            AiConversation[]
+  aiAssistantSettingsUpdated AiAssistantSettings[]
   ledgerEntries              LedgerEntry[]
   ledgerEntriesRecorded      LedgerEntry[]              @relation("LedgerEntryActor")
   emailTemplatesUpdated      EmailTemplate[]
@@ -1986,6 +1988,77 @@ model FeatureFlag {
   updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@map("feature_flags")
+}
+
+// ---------------------------------------------------------------------------
+// AI Marketplace Assistant
+// ---------------------------------------------------------------------------
+
+/// Singleton row (fixed id "singleton") — the AI Marketplace Assistant's own
+/// tunables. Provider/model are deliberately NOT here: they're global,
+/// shared with AI Product Writer, and live on IntegrationSetting (category
+/// "AI") — this table only holds what's genuinely per-feature.
+model AiAssistantSettings {
+  id                      String   @id @default("singleton")
+  isEnabled               Boolean  @default(false) @map("is_enabled")
+  isFloatingButtonEnabled Boolean  @default(true) @map("is_floating_button_enabled")
+  welcomeMessage          String   @default("👋 Welcome to Selecta Assistant") @map("welcome_message")
+  placeholderText         String   @default("Ask anything about products...") @map("placeholder_text")
+  /// JSON string[] of quick-action prompts shown on the welcome screen.
+  suggestedPrompts        Json     @map("suggested_prompts")
+  /// Messages per conversation before the assistant tells the buyer to
+  /// start a new one — bounds both cost and prompt-context growth.
+  maxConversationLength   Int      @default(30) @map("max_conversation_length")
+  systemPrompt            String   @map("system_prompt")
+  temperature             Float    @default(0.7)
+  streamingEnabled        Boolean  @default(true) @map("streaming_enabled")
+  updatedById             String?  @map("updated_by_id")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("ai_assistant_settings")
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+/// One row per authenticated buyer's assistant conversation. Guest
+/// conversations are never persisted here — chat history for guests lives
+/// only in browser localStorage — so userId is a required FK, not nullable.
+model AiConversation {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  /// Auto-derived short label (first ~40 chars of the first user message)
+  /// for a future conversation-list UI.
+  title      String?
+  isArchived Boolean  @default(false) @map("is_archived")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user     User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiConversationMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("ai_conversations")
+}
+
+model AiConversationMessage {
+  id               String        @id @default(cuid())
+  conversationId   String        @map("conversation_id")
+  role             AiMessageRole
+  content          String
+  promptTokens     Int?          @map("prompt_tokens")
+  completionTokens Int?          @map("completion_tokens")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_conversation_messages")
 }
 
 // ---------------------------------------------------------------------------

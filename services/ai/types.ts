@@ -30,6 +30,14 @@ export interface GenerateTextResult {
   usage?: AiUsage;
 }
 
+/**
+ * Emitted by `generateTextStream` — a plain `for await` loop is enough to
+ * consume both the incremental text ("delta") and the final usage/full text
+ * ("done"), so callers never need to manually drive a generator's return
+ * value to retrieve trailing data.
+ */
+export type GenerateTextStreamEvent = { type: "delta"; text: string } | { type: "done"; result: GenerateTextResult };
+
 export interface GenerateEmbeddingInput {
   text: string;
 }
@@ -53,6 +61,9 @@ export interface AiAdapter {
   readonly model: string;
 
   generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
+
+  /** Same optional-capability convention as the stubs below — an adapter that can't stream simply omits this; ai.service.ts degrades automatically. */
+  generateTextStream?(input: GenerateTextInput): AsyncGenerator<GenerateTextStreamEvent>;
 
   // Not implemented by any adapter yet — added here as the contract shape
   // future features will need, so a new adapter can opt in without a

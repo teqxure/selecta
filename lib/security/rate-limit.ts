@@ -72,6 +72,17 @@ export function checkAiGenerateRateLimit(sellerId: string) {
   return checkRateLimit(`ai-generate:${sellerId}`, 10, 5 * 60);
 }
 
+/**
+ * Marketplace Assistant messages: 15 per 5 minutes per identity. Identity is
+ * the userId for authenticated buyers, or `guest:${ipAddress}` for guests
+ * (the feature explicitly allows guest use) — each real message triggers a
+ * billed provider call, so this bounds cost/abuse independent of any
+ * per-conversation length cap.
+ */
+export function checkAssistantChatRateLimit(identifier: string) {
+  return checkRateLimit(`assistant-chat:${identifier}`, 15, 5 * 60);
+}
+
 /** Deletes expired counters — call periodically (see the monetization cron sweep) so this table doesn't grow forever. */
 export async function pruneExpiredRateLimitEntries() {
   const result = await db.rateLimitEntry.deleteMany({ where: { resetAt: { lt: new Date() } } });

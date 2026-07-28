@@ -78,6 +78,7 @@ export const ROUTES = {
     admins: "/admin/admins",
     adminDetail: (id: string) => `/admin/admins/${id}`,
     integrations: "/admin/integrations",
+    aiAssistant: "/admin/ai-assistant",
     commissions: "/admin/commissions",
     featureFlags: "/admin/feature-flags",
     withdrawals: "/admin/withdrawals",

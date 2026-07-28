@@ -1,7 +1,7 @@
 import "server-only";
 import { ConflictError } from "@/lib/errors";
 import { fetchWithTimeoutAndRetry } from "@/services/ai/http";
-import type { AiAdapter, AiProviderConfig, GenerateTextInput, GenerateTextResult } from "@/services/ai/types";
+import type { AiAdapter, AiProviderConfig, AiUsage, GenerateTextInput, GenerateTextResult, GenerateTextStreamEvent } from "@/services/ai/types";
 
 /** Fallbacks only — never the sole source of truth. Both are overridden by IntegrationSetting.config when an admin sets them (see Step 6 / integration-providers.ts). */
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
@@ -12,6 +12,14 @@ interface OpenAiChatResponse {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   error?: { message: string };
 }
+
+interface OpenAiStreamChunk {
+  choices?: { delta?: { content?: string } }[];
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
+}
+
+/** No new SSE chunk within this window means the upstream connection stalled — abort rather than hang forever (fetchWithTimeoutAndRetry's own timeout only bounds time-to-first-byte, not a stalled stream). */
+const STREAM_IDLE_TIMEOUT_MS = 15_000;
 
 /**
  * All OpenAI-specific request/response shaping lives in this one file —
@@ -49,6 +57,78 @@ export function createOpenAiAdapter(apiKey: string, config: AiProviderConfig): A
           totalTokens: json.usage.total_tokens,
         },
       };
+    },
+
+    async *generateTextStream({ messages, maxTokens = 300, temperature = 0.7 }: GenerateTextInput): AsyncGenerator<GenerateTextStreamEvent> {
+      const response = await fetchWithTimeoutAndRetry(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        const json = (await response.json().catch(() => null)) as OpenAiChatResponse | null;
+        throw new ConflictError(`AI generation failed: ${json?.error?.message ?? response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullText = "";
+      let usage: AiUsage | undefined;
+
+      const idleController = new AbortController();
+      let idleTimer: ReturnType<typeof setTimeout> | undefined;
+      const resetIdleTimer = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => idleController.abort(), STREAM_IDLE_TIMEOUT_MS);
+      };
+      resetIdleTimer();
+
+      try {
+        while (true) {
+          const readPromise = reader.read();
+          const abortPromise = new Promise<never>((_, reject) => {
+            idleController.signal.addEventListener("abort", () => reject(new ConflictError("AI generation stalled — no response from the provider.")), {
+              once: true,
+            });
+          });
+          const { done, value } = await Promise.race([readPromise, abortPromise]);
+          if (done) break;
+          resetIdleTimer();
+
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+
+          for (const frame of frames) {
+            const line = frame.replace(/^data:\s*/, "").trim();
+            if (!line || line === "[DONE]") continue;
+
+            const chunk = JSON.parse(line) as OpenAiStreamChunk;
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) {
+              fullText += delta;
+              yield { type: "delta", text: delta };
+            }
+            if (chunk.usage) {
+              usage = { promptTokens: chunk.usage.prompt_tokens, completionTokens: chunk.usage.completion_tokens, totalTokens: chunk.usage.total_tokens };
+            }
+          }
+        }
+      } finally {
+        clearTimeout(idleTimer);
+        reader.releaseLock();
+      }
+
+      yield { type: "done", result: { text: fullText.trim(), usage } };
     },
   };
 }

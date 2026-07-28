@@ -4,6 +4,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { LocationPermissionPrompt } from "@/components/buyer/LocationPermissionPrompt";
+import { AiAssistantWidget } from "@/components/marketplace-assistant/AiAssistantWidget";
 
 export default async function BuyerLayout({ children }: { children: ReactNode }) {
   const user = await currentUser();
@@ -17,6 +18,7 @@ export default async function BuyerLayout({ children }: { children: ReactNode })
       </div>
       <MobileBottomNav />
       {user?.locationPermission === "NOT_ASKED" && <LocationPermissionPrompt />}
+      <AiAssistantWidget />
     </div>
   );
 }

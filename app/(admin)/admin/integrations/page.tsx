@@ -14,6 +14,7 @@ import {
   setIntegrationSecretAction,
   setIntegrationSecretsAction,
   deleteIntegrationSecretAction,
+  updateIntegrationConfigAction,
 } from "./actions";
 import { AddProviderForm } from "./add-provider-form";
 
@@ -100,7 +101,32 @@ export default async function AdminIntegrationsPage() {
                         Save credentials
                       </Button>
                     </form>
-                  ) : (
+                  ) : null}
+
+                  {spec?.configFields && (
+                    <form action={updateIntegrationConfigAction} className="flex flex-col gap-3 border-t border-border pt-3">
+                      <input type="hidden" name="category" value={integration.category} />
+                      <input type="hidden" name="provider" value={integration.provider} />
+                      {spec.configFields.map((field) => {
+                        const existingConfig = (integration.config as Record<string, string> | null) ?? {};
+                        return (
+                          <Input
+                            key={field.key}
+                            name={field.key}
+                            label={field.label}
+                            placeholder={field.placeholder}
+                            defaultValue={existingConfig[field.key] ?? ""}
+                            helperText={field.helperText}
+                          />
+                        );
+                      })}
+                      <Button type="submit" size="sm" variant="secondary" className="self-start">
+                        Save configuration
+                      </Button>
+                    </form>
+                  )}
+
+                  {!spec && (
                     <>
                       {integration.secrets.map((secret) => (
                         <div key={secret.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">

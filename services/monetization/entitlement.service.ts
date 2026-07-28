@@ -143,13 +143,47 @@ export async function requireAiFeatureUsage(sellerId: string, feature: FeatureKe
   return result.limits;
 }
 
-/** Only call after a successful generation — a failed AI call must never consume a seller's usage slot. */
-export async function recordAiUsage(sellerId: string, feature: FeatureKey): Promise<void> {
+export interface AiUsageRecord {
+  provider: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/**
+ * Only call after a successful generation — a failed AI call must never
+ * consume a seller's usage slot. `usage` is optional so existing/future
+ * call sites that don't have token counts (or an adapter that didn't
+ * return them) still work; provider/model are stored as the most recent
+ * call's values (informational), token counts accumulate across the
+ * cycle same as `count`.
+ */
+export async function recordAiUsage(sellerId: string, feature: FeatureKey, usage?: AiUsageRecord): Promise<void> {
   const cycleStart = currentCycleStart();
   await db.aiFeatureUsage.upsert({
     where: { sellerId_featureKey_cycleStart: { sellerId, featureKey: feature, cycleStart } },
-    create: { sellerId, featureKey: feature, cycleStart, count: 1 },
-    update: { count: { increment: 1 } },
+    create: {
+      sellerId,
+      featureKey: feature,
+      cycleStart,
+      count: 1,
+      provider: usage?.provider,
+      model: usage?.model,
+      promptTokens: usage?.promptTokens ?? 0,
+      completionTokens: usage?.completionTokens ?? 0,
+      totalTokens: usage?.totalTokens ?? 0,
+    },
+    update: {
+      count: { increment: 1 },
+      ...(usage && {
+        provider: usage.provider,
+        model: usage.model,
+        promptTokens: { increment: usage.promptTokens },
+        completionTokens: { increment: usage.completionTokens },
+        totalTokens: { increment: usage.totalTokens },
+      }),
+    },
   });
 }
 

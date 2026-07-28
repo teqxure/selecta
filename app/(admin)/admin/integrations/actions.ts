@@ -7,6 +7,7 @@ import {
   upsertIntegrationSetting,
   setIntegrationSecret,
   deleteIntegrationSecret,
+  getIntegrationSettingByProvider,
 } from "@/services/platform/integration-settings.service";
 import { findProviderSpec } from "@/lib/constants/integration-providers";
 import { ROUTES } from "@/lib/constants/routes";
@@ -67,5 +68,37 @@ export async function deleteIntegrationSecretAction(formData: FormData) {
   const id = String(formData.get("id"));
 
   await deleteIntegrationSecret(session.userId, id);
+  revalidatePath(ROUTES.admin.integrations);
+}
+
+/**
+ * Saves a provider's non-secret config (model, base URL, etc.) — kept
+ * deliberately separate from `upsertIntegrationSettingAction` so this
+ * never touches `isEnabled`/`isPrimary`: omitting those keys from the
+ * input means Prisma leaves them untouched (`undefined` = "don't update
+ * this field"), so saving config can never accidentally flip a provider
+ * on/off or change which one is primary.
+ */
+export async function updateIntegrationConfigAction(formData: FormData) {
+  const session = await requireRole(Role.SUPER_ADMIN);
+
+  const category = String(formData.get("category")) as IntegrationCategory;
+  const provider = String(formData.get("provider") || "");
+
+  const spec = findProviderSpec(category, provider);
+  if (!spec?.configFields) return;
+
+  // Merge onto the existing config rather than replace it — a blank field
+  // means "leave whatever was already set," same convention as blank
+  // fields in setIntegrationSecretsAction, so this can never accidentally
+  // wipe a previously-saved value.
+  const existing = await getIntegrationSettingByProvider(category, provider);
+  const config: Record<string, string> = { ...((existing?.config as Record<string, string> | null) ?? {}) };
+  for (const field of spec.configFields) {
+    const value = String(formData.get(field.key) || "").trim();
+    if (value) config[field.key] = value;
+  }
+
+  await upsertIntegrationSetting(session.userId, { category, provider, config });
   revalidatePath(ROUTES.admin.integrations);
 }

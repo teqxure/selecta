@@ -2093,13 +2093,26 @@ model PlanFeature {
 /// "N actions/month" exactly. One row per (seller, feature, month);
 /// `count` increments only on a successful use, never on a failed call.
 model AiFeatureUsage {
-  id         String   @id @default(cuid())
-  sellerId   String   @map("seller_id")
-  featureKey String   @map("feature_key")
-  cycleStart DateTime @map("cycle_start")
-  count      Int      @default(0)
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(cuid())
+  sellerId         String   @map("seller_id")
+  featureKey       String   @map("feature_key")
+  cycleStart       DateTime @map("cycle_start")
+  count            Int      @default(0)
+  /// Which provider/model actually served the most recent call this cycle
+  /// — informational (reflects the last call, not cumulative), so an
+  /// admin can see what's actually being billed without a separate
+  /// tracking table. Null for cycles predating this column (existing
+  /// rows), never backfilled.
+  provider         String?
+  model            String?
+  /// Token counts ARE cumulative across the cycle — same accumulation
+  /// pattern as `count`, so a monthly token/cost view is one `SUM()`
+  /// away without a new table.
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   seller SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 

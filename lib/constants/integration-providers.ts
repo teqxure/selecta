@@ -8,11 +8,26 @@ export interface ProviderSecretField {
   helperText?: string;
 }
 
+export interface ProviderConfigField {
+  /** The exact key read from IntegrationSetting.config (e.g. `config.model`) by the corresponding adapter/client. */
+  key: string;
+  label: string;
+  placeholder?: string;
+  helperText?: string;
+}
+
 export interface ProviderSpec {
   /** Matches IntegrationSetting.provider exactly. */
   value: string;
   label: string;
   fields: ProviderSecretField[];
+  /**
+   * Non-secret settings (model name, base URL, region, API version, ...)
+   * stored in IntegrationSetting.config, not encrypted — rendered as
+   * plain text inputs, never PasswordInput. Optional: a provider with no
+   * tunable config (e.g. Paystack) simply omits this.
+   */
+  configFields?: ProviderConfigField[];
   /** Set when nothing in the codebase reads this provider's secrets yet — stored securely, but not live. */
   notYetWired?: boolean;
 }
@@ -95,6 +110,10 @@ export const PROVIDER_CATALOG: Record<IntegrationCategory, ProviderSpec[]> = {
       value: "openai",
       label: "OpenAI",
       fields: [{ key: "API_KEY", label: "API Key", placeholder: "sk-..." }],
+      configFields: [
+        { key: "model", label: "Model", placeholder: "gpt-4o-mini", helperText: "Leave blank to use the adapter's default." },
+        { key: "baseUrl", label: "Base URL", placeholder: "https://api.openai.com/v1", helperText: "Only change this for an OpenAI-compatible proxy or gateway." },
+      ],
     },
     {
       value: "anthropic",

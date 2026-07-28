@@ -1,6 +1,6 @@
 import "server-only";
 import { requireAiFeatureUsage, recordAiUsage } from "@/services/monetization/entitlement.service";
-import { completeChat } from "@/services/ai/openai-client";
+import { generateText } from "@/services/ai/ai.service";
 
 export interface ProductWriterInput {
   title: string;
@@ -41,11 +41,23 @@ function buildUserPrompt(input: ProductWriterInput): string {
 export async function generateProductDescription(sellerId: string, input: ProductWriterInput): Promise<string> {
   await requireAiFeatureUsage(sellerId, "AI_PRODUCT_WRITER");
 
-  const description = await completeChat([
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: buildUserPrompt(input) },
-  ]);
+  const result = await generateText({
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: buildUserPrompt(input) },
+    ],
+  });
 
-  await recordAiUsage(sellerId, "AI_PRODUCT_WRITER");
-  return description;
+  await recordAiUsage(
+    sellerId,
+    "AI_PRODUCT_WRITER",
+    result.usage && {
+      provider: result.provider,
+      model: result.model,
+      promptTokens: result.usage.promptTokens,
+      completionTokens: result.usage.completionTokens,
+      totalTokens: result.usage.totalTokens,
+    },
+  );
+  return result.text;
 }
